@@ -85,6 +85,34 @@ def add_message(user_id, username, first_name, last_name, message_text, timestam
     users_data["messages"].append(message_info)
     save_users(users_data)
 
+async def notify_admin_contact(context, user, message_text):
+    """Notifie l'admin d'un nouveau message de contact"""
+    try:
+        # Récupérer l'ID de l'admin (premier admin connecté)
+        admin_id = list(admins)[0] if admins else None
+        
+        if admin_id:
+            # Créer le message de notification
+            username = f"@{user.username}" if user.username else "Pas de @username"
+            name = f"{user.first_name} {user.last_name}".strip()
+            
+            notification_text = (
+                f"🔔 **Nouveau message de contact !**\n\n"
+                f"**👤 De :** {name}\n"
+                f"**📱 @username :** {username}\n"
+                f"**🆔 ID :** `{user.id}`\n\n"
+                f"**💬 Message :**\n{message_text}"
+            )
+            
+            # Envoyer la notification à l'admin
+            await context.bot.send_message(
+                chat_id=admin_id,
+                text=notification_text,
+                parse_mode="Markdown"
+            )
+    except Exception as e:
+        print(f"Erreur lors de la notification admin: {e}")
+
 async def clear_all_bot_messages(context):
     """Supprime tous les messages du bot avec tous les utilisateurs"""
     users_data = load_users()
@@ -105,12 +133,13 @@ async def clear_all_bot_messages(context):
                         message_ids.append(message.message_id)
                 
                 # Supprimer les messages par lots pour éviter les limites de rate
-                for message_id in message_ids:
+                # Supprimer du plus récent au plus ancien pour éviter les conflits
+                for message_id in reversed(message_ids):
                     try:
                         await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
                         deleted_count += 1
                         # Petite pause pour éviter les limites de rate
-                        await asyncio.sleep(0.03)
+                        await asyncio.sleep(0.02)
                     except Exception as e:
                         # Ignorer les erreurs de suppression (message trop ancien, etc.)
                         continue
@@ -128,6 +157,55 @@ async def clear_all_bot_messages(context):
 
 data = load_data()
 admins = set()  # liste des ID admins connectés
+
+# --- Fonction pour forcer la suppression de tous les messages du bot ---
+async def force_delete_all_bot_messages(context, chat_id):
+    """Force la suppression de tous les messages du bot dans un chat"""
+    try:
+        message_ids = []
+        async for message in context.bot.iter_history(chat_id, limit=500):
+            if message.from_user and message.from_user.id == context.bot.id:
+                message_ids.append(message.message_id)
+        
+        # Supprimer du plus récent au plus ancien
+        for message_id in reversed(message_ids):
+            try:
+                await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+                await asyncio.sleep(0.01)
+            except:
+                continue
+    except:
+        pass
+
+# --- Fonction pour notifier l'admin des messages de contact ---
+async def notify_admin_contact(context, user, message_text):
+    """Notifie l'admin d'un nouveau message de contact"""
+    try:
+        # Récupérer l'ID admin (premier admin connecté)
+        admin_id = list(admins)[0] if admins else None
+        if not admin_id:
+            return
+        
+        # Formater le message pour l'admin
+        username = f"@{user.username}" if user.username else "Pas de @username"
+        name = f"{user.first_name} {user.last_name}".strip() if user.last_name else user.first_name
+        
+        admin_message = (
+            f"📨 **Nouveau message de contact**\n\n"
+            f"👤 **Utilisateur :** {name}\n"
+            f"🆔 **ID :** `{user.id}`\n"
+            f"📱 **@username :** {username}\n\n"
+            f"💬 **Message :**\n{message_text}"
+        )
+        
+        # Envoyer le message à l'admin
+        await context.bot.send_message(
+            chat_id=admin_id,
+            text=admin_message,
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        print(f"Erreur lors de la notification admin: {e}")
 
 # --- Fonction utilitaire pour l'édition sécurisée de messages ---
 async def safe_edit_message(query, text, reply_markup=None, parse_mode=None):
@@ -206,26 +284,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
     
     # Supprimer tous les anciens messages du bot dans cette conversation
-    try:
-        message_ids = []
-        async for message in context.bot.iter_history(user.id, limit=50):
-            if message.from_user and message.from_user.id == context.bot.id:
-                message_ids.append(message.message_id)
-        
-        # Supprimer les anciens messages du bot
-        for message_id in message_ids:
-            try:
-                await context.bot.delete_message(chat_id=user.id, message_id=message_id)
-                await asyncio.sleep(0.1)
-            except:
-                continue
-    except:
-        pass
+    await force_delete_all_bot_messages(context, user.id)
     
     keyboard = [
         [
             InlineKeyboardButton("📞 Contact", callback_data="contact"),
             InlineKeyboardButton("💼 Nos Services", callback_data="services"),
+        ],
+        [
+            InlineKeyboardButton("💬 Nous contacter", callback_data="contact_us"),
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -262,6 +329,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [
                 InlineKeyboardButton("📞 Contact", callback_data="contact"),
                 InlineKeyboardButton("💼 Nos Services", callback_data="services"),
+            ],
+            [
+                InlineKeyboardButton("💬 Nous contacter", callback_data="contact_us"),
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -313,6 +383,60 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except Exception as e2:
                     print(f"Erreur lors de l'envoi du message: {e2}")
                     await query.answer("Erreur lors de l'affichage du contenu")
+    elif query.data == "contact_us":
+        # Menu pour contacter l'admin
+        keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="back_to_main")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        content = ("💬 **Nous contacter**\n\n"
+                  "Vous pouvez nous envoyer un message directement !\n\n"
+                  "Écrivez votre message ci-dessous et nous vous répondrons rapidement.\n\n"
+                  "📝 *Tapez votre message...*")
+        
+        # Vérifier s'il y a une photo d'accueil pour l'afficher avec le contenu
+        welcome_photo = data.get("welcome_photo")
+        
+        if welcome_photo:
+            # Si on a une photo d'accueil, essayer d'éditer le média
+            try:
+                await query.edit_message_media(
+                    media=InputMediaPhoto(media=welcome_photo, caption=content),
+                    reply_markup=reply_markup
+                )
+            except Exception as e:
+                # Si l'édition du média échoue, essayer d'éditer le texte
+                try:
+                    await query.edit_message_text(
+                        text=f"{content}\n\n🖼️ *Photo d'accueil disponible*",
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+                except Exception as e2:
+                    # Si tout échoue, envoyer un nouveau message
+                    try:
+                        await query.message.reply_photo(
+                            photo=welcome_photo,
+                            caption=content,
+                            reply_markup=reply_markup
+                        )
+                    except Exception as e3:
+                        print(f"Erreur lors de l'affichage de la photo: {e3}")
+                        await query.answer("Erreur lors de l'affichage du contenu")
+        else:
+            # Pas de photo, éditer le texte normalement
+            try:
+                await query.edit_message_text(text=content, reply_markup=reply_markup, parse_mode="Markdown")
+            except Exception as e:
+                # Si l'édition échoue, envoyer un nouveau message
+                try:
+                    await query.message.reply_text(text=content, reply_markup=reply_markup, parse_mode="Markdown")
+                except Exception as e2:
+                    print(f"Erreur lors de l'envoi du message: {e2}")
+                    await query.answer("Erreur lors de l'affichage du contenu")
+        
+        # Marquer l'utilisateur comme en mode contact
+        context.user_data["contact_mode"] = True
+        
     else:
         content = data.get(query.data, "Texte non défini.")
         keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="back_to_main")]]
@@ -370,22 +494,8 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
     
     # Supprimer tous les anciens messages du bot dans cette conversation
-    try:
-        user_id = update.effective_user.id
-        message_ids = []
-        async for message in context.bot.iter_history(user_id, limit=50):
-            if message.from_user and message.from_user.id == context.bot.id:
-                message_ids.append(message.message_id)
-        
-        # Supprimer les anciens messages du bot
-        for message_id in message_ids:
-            try:
-                await context.bot.delete_message(chat_id=user_id, message_id=message_id)
-                await asyncio.sleep(0.1)
-            except:
-                continue
-    except:
-        pass
+    user_id = update.effective_user.id
+    await force_delete_all_bot_messages(context, user_id)
     
     await update.message.reply_text("🔐 Entrez le mot de passe admin :")
     context.user_data["awaiting_password"] = True
@@ -577,18 +687,7 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         try:
             # Supprimer les messages du bot dans le chat admin actuel
             admin_chat_id = query.from_user.id
-            message_ids = []
-            async for message in context.bot.iter_history(admin_chat_id, limit=50):
-                if message.from_user and message.from_user.id == context.bot.id:
-                    message_ids.append(message.message_id)
-            
-            for message_id in message_ids:
-                try:
-                    await context.bot.delete_message(chat_id=admin_chat_id, message_id=message_id)
-                    deleted_count += 1
-                    await asyncio.sleep(0.05)
-                except:
-                    continue
+            await force_delete_all_bot_messages(context, admin_chat_id)
         except:
             pass
         
@@ -798,6 +897,32 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Si c'est un admin, gérer les actions admin
     if update.message.from_user.id in admins:
         await admin_actions(update, context)
+        return
+    
+    # Vérifier si l'utilisateur est en mode contact
+    if context.user_data.get("contact_mode"):
+        # Enregistrer le message de contact
+        user = update.effective_user
+        message_text = update.message.text
+        timestamp = str(update.effective_message.date)
+        
+        add_message(
+            user.id,
+            user.username,
+            user.first_name,
+            user.last_name,
+            message_text,
+            timestamp
+        )
+        
+        # Notifier l'admin du nouveau message de contact
+        await notify_admin_contact(context, user, message_text)
+        
+        # Confirmer la réception du message
+        await update.message.reply_text("✅ Message envoyé ! Nous vous répondrons bientôt.")
+        
+        # Désactiver le mode contact
+        context.user_data["contact_mode"] = False
         return
     
     # Si c'est un utilisateur normal, enregistrer son message
