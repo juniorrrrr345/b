@@ -4,8 +4,6 @@ from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    ReplyKeyboardMarkup,
-    KeyboardButton,
 )
 from telegram.ext import (
     ApplicationBuilder,
@@ -118,8 +116,6 @@ async def check_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return False
 
 
-
-
 # --- Gestion des callbacks admin ---
 async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
@@ -173,6 +169,7 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
             "✅ Déconnecté du mode admin.\n\n👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :",
             reply_markup=reply_markup,
         )
+
 
 # --- Gestion des actions admin (texte) ---
 async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
