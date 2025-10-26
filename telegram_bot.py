@@ -110,7 +110,7 @@ async def clear_all_bot_messages(context):
                         await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
                         deleted_count += 1
                         # Petite pause pour éviter les limites de rate
-                        await asyncio.sleep(0.1)
+                        await asyncio.sleep(0.05)
                     except Exception as e:
                         # Ignorer les erreurs de suppression (message trop ancien, etc.)
                         continue
@@ -301,17 +301,46 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="back_to_main")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Gestion d'erreurs pour l'édition de messages
-        try:
-            await safe_edit_message(query, text=content, reply_markup=reply_markup)
-        except Exception as e:
-            # Si l'édition échoue (message photo ou contenu identique), envoyer un nouveau message
+        # Vérifier s'il y a une photo d'accueil pour l'afficher avec le contenu
+        welcome_photo = data.get("welcome_photo")
+        
+        if welcome_photo:
+            # Si on a une photo d'accueil, essayer d'éditer le média
             try:
-                await query.message.reply_text(text=content, reply_markup=reply_markup)
-            except Exception as e2:
-                print(f"Erreur lors de l'envoi du message: {e2}")
-                # En dernier recours, répondre au callback
-                await query.answer("Erreur lors de l'affichage du contenu")
+                await query.edit_message_media(
+                    media=InputMediaPhoto(media=welcome_photo, caption=content),
+                    reply_markup=reply_markup
+                )
+            except Exception as e:
+                # Si l'édition du média échoue, essayer d'éditer le texte
+                try:
+                    await query.edit_message_text(
+                        text=f"{content}\n\n🖼️ *Photo d'accueil disponible*",
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+                except Exception as e2:
+                    # Si tout échoue, envoyer un nouveau message
+                    try:
+                        await query.message.reply_photo(
+                            photo=welcome_photo,
+                            caption=content,
+                            reply_markup=reply_markup
+                        )
+                    except Exception as e3:
+                        print(f"Erreur lors de l'affichage de la photo: {e3}")
+                        await query.answer("Erreur lors de l'affichage du contenu")
+        else:
+            # Pas de photo, éditer le texte normalement
+            try:
+                await query.edit_message_text(text=content, reply_markup=reply_markup)
+            except Exception as e:
+                # Si l'édition échoue, envoyer un nouveau message
+                try:
+                    await query.message.reply_text(text=content, reply_markup=reply_markup)
+                except Exception as e2:
+                    print(f"Erreur lors de l'envoi du message: {e2}")
+                    await query.answer("Erreur lors de l'affichage du contenu")
 
 
 # --- Commande /admin ---
@@ -507,6 +536,26 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         # Supprimer les messages du bot avec les utilisateurs
         deleted_count = await clear_all_bot_messages(context)
         
+        # Supprimer aussi les messages de confirmation et les callbacks
+        # en supprimant les messages récents du bot dans tous les chats
+        try:
+            # Supprimer les messages du bot dans le chat admin actuel
+            admin_chat_id = query.from_user.id
+            message_ids = []
+            async for message in context.bot.iter_history(admin_chat_id, limit=50):
+                if message.from_user and message.from_user.id == context.bot.id:
+                    message_ids.append(message.message_id)
+            
+            for message_id in message_ids:
+                try:
+                    await context.bot.delete_message(chat_id=admin_chat_id, message_id=message_id)
+                    deleted_count += 1
+                    await asyncio.sleep(0.05)
+                except:
+                    continue
+        except:
+            pass
+        
         keyboard = [
             [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
             [InlineKeyboardButton("🗑️ Supprimer tous les messages", callback_data="admin_clear_messages")],
@@ -514,6 +563,7 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
         ]
         markup = InlineKeyboardMarkup(keyboard)
+        # Afficher le message de confirmation
         await safe_edit_message(
             query,
             f"✅ **Suppression terminée !**\n\n"
@@ -526,6 +576,13 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             reply_markup=markup,
             parse_mode="Markdown"
         )
+        
+        # Supprimer le message de confirmation après 3 secondes
+        try:
+            await asyncio.sleep(3)
+            await context.bot.delete_message(chat_id=query.from_user.id, message_id=query.message.message_id)
+        except:
+            pass
     elif query.data == "admin_view_messages":
         users_data = load_users()
         messages = users_data["messages"]
