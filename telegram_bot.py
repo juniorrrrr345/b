@@ -102,24 +102,22 @@ async def check_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.message.text == ADMIN_PASSWORD:
             admins.add(update.message.from_user.id)
             context.user_data["awaiting_password"] = False
-            await show_admin_panel(update)
+            # Créer le panneau admin avec des boutons callback
+            keyboard = [
+                [
+                    InlineKeyboardButton("✏️ Modifier Contact", callback_data="admin_edit_contact"),
+                    InlineKeyboardButton("✏️ Modifier Services", callback_data="admin_edit_services")
+                ],
+                [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
+            ]
+            markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("⚙️ Panneau Admin :", reply_markup=markup)
         else:
             await update.message.reply_text("❌ Mot de passe incorrect.")
         return True
     return False
 
 
-# --- Panneau admin principal ---
-async def show_admin_panel(update: Update):
-    keyboard = [
-        [
-            InlineKeyboardButton("✏️ Modifier Contact", callback_data="admin_edit_contact"),
-            InlineKeyboardButton("✏️ Modifier Services", callback_data="admin_edit_services")
-        ],
-        [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
-    ]
-    markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("⚙️ Panneau Admin :", reply_markup=markup)
 
 
 # --- Gestion des callbacks admin ---
@@ -130,21 +128,37 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
         return
     
     if query.data == "admin_edit_contact":
+        keyboard = [[InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]]
+        markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
             "✏️ **Modification du Contact**\n\n"
             "Envoie le nouveau texte pour *Contact* :\n\n"
             f"*Texte actuel :*\n{data.get('contact', 'Aucun texte défini')}",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
+            reply_markup=markup
         )
         context.user_data["editing"] = "contact"
     elif query.data == "admin_edit_services":
+        keyboard = [[InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]]
+        markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
             "✏️ **Modification des Services**\n\n"
             "Envoie le nouveau texte pour *Services* :\n\n"
             f"*Texte actuel :*\n{data.get('services', 'Aucun texte défini')}",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
+            reply_markup=markup
         )
         context.user_data["editing"] = "services"
+    elif query.data == "admin_panel":
+        keyboard = [
+            [
+                InlineKeyboardButton("✏️ Modifier Contact", callback_data="admin_edit_contact"),
+                InlineKeyboardButton("✏️ Modifier Services", callback_data="admin_edit_services")
+            ],
+            [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("⚙️ Panneau Admin :", reply_markup=markup)
     elif query.data == "admin_quit":
         admins.discard(user_id)
         context.user_data.clear()
@@ -173,7 +187,7 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_data(data)
         context.user_data["editing"] = None
         
-        # Retour au menu admin
+        # Retour au menu admin avec callback
         keyboard = [
             [
                 InlineKeyboardButton("✏️ Modifier Contact", callback_data="admin_edit_contact"),
