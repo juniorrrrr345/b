@@ -130,7 +130,10 @@ async def clear_all_bot_messages(context):
                 message_ids = []
                 async for message in context.bot.iter_history(chat_id, limit=200):
                     if message.from_user and message.from_user.id == context.bot.id:
-                        message_ids.append(message.message_id)
+                        # Ne supprimer que les messages avec des boutons (menus) ou des commandes
+                        if (message.reply_markup or 
+                            message.text and ("/start" in message.text or "Choisissez" in message.text or "Menu" in message.text or "Panel" in message.text or "Bienvenue" in message.text)):
+                            message_ids.append(message.message_id)
                 
                 # Supprimer les messages par lots pour éviter les limites de rate
                 # Supprimer du plus récent au plus ancien pour éviter les conflits
@@ -198,11 +201,17 @@ async def notify_admin_contact(context, user, message_text):
             f"💬 **Message :**\n{message_text}"
         )
         
-        # Envoyer le message à l'admin
+        # Créer un clavier avec bouton pour répondre
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        keyboard = [[InlineKeyboardButton(f"💬 Répondre à {name}", callback_data=f"reply_to_{user.id}")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Envoyer le message à l'admin avec bouton de réponse
         await context.bot.send_message(
             chat_id=admin_id,
             text=admin_message,
-            parse_mode="Markdown"
+            parse_mode="Markdown",
+            reply_markup=reply_markup
         )
     except Exception as e:
         print(f"Erreur lors de la notification admin: {e}")
@@ -752,6 +761,19 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
                 reply_markup=markup,
                 parse_mode="Markdown"
             )
+    
+    elif query.data.startswith("reply_to_"):
+        # Gérer la réponse à un utilisateur
+        user_id = int(query.data.split("_")[2])
+        context.user_data["replying_to"] = user_id
+        context.user_data["reply_mode"] = True
+        
+        text = f"💬 **Répondre à l'utilisateur**\n\nID: `{user_id}`\n\nTapez votre message de réponse :"
+        keyboard = [[InlineKeyboardButton("❌ Annuler", callback_data="admin_panel")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await safe_edit_message(query, text, reply_markup, "Markdown")
+    
     elif query.data == "admin_panel":
         keyboard = [
             [
@@ -896,6 +918,28 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Si c'est un admin, gérer les actions admin
     if update.message.from_user.id in admins:
+        # Gérer les réponses aux utilisateurs
+        if context.user_data.get("reply_mode"):
+            user_id = context.user_data.get("replying_to")
+            if user_id:
+                try:
+                    # Envoyer le message à l'utilisateur
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=f"💬 **Réponse de l'admin :**\n\n{update.message.text}"
+                    )
+                    
+                    # Confirmer à l'admin
+                    await update.message.reply_text(f"✅ Message envoyé à l'utilisateur {user_id}")
+                    
+                    # Sortir du mode réponse
+                    context.user_data["reply_mode"] = False
+                    context.user_data["replying_to"] = None
+                    return
+                except Exception as e:
+                    await update.message.reply_text(f"❌ Erreur lors de l'envoi : {e}")
+                    return
+        
         await admin_actions(update, context)
         return
     
