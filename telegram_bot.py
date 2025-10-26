@@ -98,9 +98,9 @@ async def clear_all_bot_messages(context):
             # Essayer de supprimer les messages récents
             # Note: L'API Telegram limite la suppression aux messages des 48 dernières heures
             try:
-                # Récupérer les messages récents (limité à 100 pour éviter les timeouts)
+                # Récupérer les messages récents (limité à 200 pour supprimer plus de messages)
                 message_ids = []
-                async for message in context.bot.iter_history(chat_id, limit=100):
+                async for message in context.bot.iter_history(chat_id, limit=200):
                     if message.from_user and message.from_user.id == context.bot.id:
                         message_ids.append(message.message_id)
                 
@@ -110,7 +110,7 @@ async def clear_all_bot_messages(context):
                         await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
                         deleted_count += 1
                         # Petite pause pour éviter les limites de rate
-                        await asyncio.sleep(0.05)
+                        await asyncio.sleep(0.03)
                     except Exception as e:
                         # Ignorer les erreurs de suppression (message trop ancien, etc.)
                         continue
@@ -204,6 +204,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_to_message.delete()
         except:
             pass
+    
+    # Supprimer tous les anciens messages du bot dans cette conversation
+    try:
+        message_ids = []
+        async for message in context.bot.iter_history(user.id, limit=50):
+            if message.from_user and message.from_user.id == context.bot.id:
+                message_ids.append(message.message_id)
+        
+        # Supprimer les anciens messages du bot
+        for message_id in message_ids:
+            try:
+                await context.bot.delete_message(chat_id=user.id, message_id=message_id)
+                await asyncio.sleep(0.1)
+            except:
+                continue
+    except:
+        pass
     
     keyboard = [
         [
@@ -352,6 +369,24 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
     
+    # Supprimer tous les anciens messages du bot dans cette conversation
+    try:
+        user_id = update.effective_user.id
+        message_ids = []
+        async for message in context.bot.iter_history(user_id, limit=50):
+            if message.from_user and message.from_user.id == context.bot.id:
+                message_ids.append(message.message_id)
+        
+        # Supprimer les anciens messages du bot
+        for message_id in message_ids:
+            try:
+                await context.bot.delete_message(chat_id=user_id, message_id=message_id)
+                await asyncio.sleep(0.1)
+            except:
+                continue
+    except:
+        pass
+    
     await update.message.reply_text("🔐 Entrez le mot de passe admin :")
     context.user_data["awaiting_password"] = True
 
@@ -401,6 +436,7 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
             pass
 
 async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TYPE):
+    user_id = query.from_user.id
     
     if query.data == "admin_edit_contact":
         keyboard = [[InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]]
