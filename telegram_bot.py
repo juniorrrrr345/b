@@ -4,6 +4,7 @@ from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    InputMediaPhoto,
 )
 from telegram.ext import (
     ApplicationBuilder,
@@ -29,6 +30,8 @@ def load_data():
         data = {
             "contact": "📞 Contactez-nous : contact@monentreprise.com\nTéléphone : +33 6 12 34 56 78",
             "services": "💼 Nos Services :\n1️⃣ Développement Web\n2️⃣ Design\n3️⃣ Marketing Digital",
+            "welcome_text": "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :",
+            "welcome_photo": None,
         }
         save_data(data)
         return data
@@ -52,10 +55,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(
-        "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :",
-        reply_markup=reply_markup,
-    )
+    
+    welcome_text = data.get("welcome_text", "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :")
+    welcome_photo = data.get("welcome_photo")
+    
+    if welcome_photo:
+        await update.message.reply_photo(
+            photo=welcome_photo,
+            caption=welcome_text,
+            reply_markup=reply_markup,
+        )
+    else:
+        await update.message.reply_text(
+            welcome_text,
+            reply_markup=reply_markup,
+        )
 
 
 # --- Boutons ---
@@ -77,10 +91,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
-            "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :",
-            reply_markup=reply_markup,
-        )
+        
+        welcome_text = data.get("welcome_text", "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :")
+        welcome_photo = data.get("welcome_photo")
+        
+        if welcome_photo:
+            await query.edit_message_media(
+                media=InputMediaPhoto(media=welcome_photo, caption=welcome_text),
+                reply_markup=reply_markup
+            )
+        else:
+            await query.edit_message_text(
+                welcome_text,
+                reply_markup=reply_markup,
+            )
     else:
         content = data.get(query.data, "Texte non défini.")
         keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="back_to_main")]]
@@ -106,6 +130,7 @@ async def check_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     InlineKeyboardButton("✏️ Modifier Contact", callback_data="admin_edit_contact"),
                     InlineKeyboardButton("✏️ Modifier Services", callback_data="admin_edit_services")
                 ],
+                [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
                 [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
             ]
             markup = InlineKeyboardMarkup(keyboard)
@@ -145,12 +170,69 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=markup
         )
         context.user_data["editing"] = "services"
+    elif query.data == "admin_photo_panel":
+        keyboard = [
+            [InlineKeyboardButton("✏️ Modifier Texte d'accueil", callback_data="admin_edit_welcome_text")],
+            [InlineKeyboardButton("🖼️ Modifier Photo d'accueil", callback_data="admin_edit_welcome_photo")],
+            [InlineKeyboardButton("🗑️ Supprimer Photo d'accueil", callback_data="admin_delete_welcome_photo")],
+            [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        current_photo = data.get("welcome_photo")
+        photo_status = "✅ Photo définie" if current_photo else "❌ Aucune photo"
+        await query.edit_message_text(
+            f"🖼️ **Panel Admin Photo**\n\n"
+            f"*Texte d'accueil actuel :*\n{data.get('welcome_text', 'Aucun texte défini')}\n\n"
+            f"*Photo d'accueil :* {photo_status}",
+            parse_mode="Markdown",
+            reply_markup=markup
+        )
+    elif query.data == "admin_edit_welcome_text":
+        keyboard = [[InlineKeyboardButton("🔙 Retour au panel photo", callback_data="admin_photo_panel")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            "✏️ **Modification du Texte d'accueil**\n\n"
+            "Envoie le nouveau texte pour l'accueil :\n\n"
+            f"*Texte actuel :*\n{data.get('welcome_text', 'Aucun texte défini')}",
+            parse_mode="Markdown",
+            reply_markup=markup
+        )
+        context.user_data["editing"] = "welcome_text"
+    elif query.data == "admin_edit_welcome_photo":
+        keyboard = [[InlineKeyboardButton("🔙 Retour au panel photo", callback_data="admin_photo_panel")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            "🖼️ **Modification de la Photo d'accueil**\n\n"
+            "Envoie la nouvelle photo pour l'accueil :\n\n"
+            "*Note :* Envoie une image en tant que photo (pas en tant que fichier)",
+            parse_mode="Markdown",
+            reply_markup=markup
+        )
+        context.user_data["editing"] = "welcome_photo"
+    elif query.data == "admin_delete_welcome_photo":
+        data["welcome_photo"] = None
+        save_data(data)
+        keyboard = [
+            [InlineKeyboardButton("✏️ Modifier Texte d'accueil", callback_data="admin_edit_welcome_text")],
+            [InlineKeyboardButton("🖼️ Modifier Photo d'accueil", callback_data="admin_edit_welcome_photo")],
+            [InlineKeyboardButton("🗑️ Supprimer Photo d'accueil", callback_data="admin_delete_welcome_photo")],
+            [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            "✅ **Photo d'accueil supprimée !**\n\n"
+            f"*Texte d'accueil actuel :*\n{data.get('welcome_text', 'Aucun texte défini')}\n\n"
+            f"*Photo d'accueil :* ❌ Aucune photo",
+            parse_mode="Markdown",
+            reply_markup=markup
+        )
     elif query.data == "admin_panel":
         keyboard = [
             [
                 InlineKeyboardButton("✏️ Modifier Contact", callback_data="admin_edit_contact"),
                 InlineKeyboardButton("✏️ Modifier Services", callback_data="admin_edit_services")
             ],
+            [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
             [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
         ]
         markup = InlineKeyboardMarkup(keyboard)
@@ -180,32 +262,99 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Enregistrement d'une modification
     section = context.user_data.get("editing")
     if section:
-        data[section] = update.message.text
-        save_data(data)
-        context.user_data["editing"] = None
-        
-        # Retour au menu admin avec callback
-        keyboard = [
-            [
-                InlineKeyboardButton("✏️ Modifier Contact", callback_data="admin_edit_contact"),
-                InlineKeyboardButton("✏️ Modifier Services", callback_data="admin_edit_services")
-            ],
-            [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
-        ]
-        markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            f"✅ Texte '{section}' mis à jour !\n\n⚙️ Panneau Admin :",
-            reply_markup=markup
-        )
+        if section == "welcome_photo":
+            # Gestion de la photo d'accueil
+            if update.message.photo:
+                # Prendre la photo de plus haute qualité
+                photo = update.message.photo[-1]
+                data["welcome_photo"] = photo.file_id
+                save_data(data)
+                context.user_data["editing"] = None
+                
+                # Retour au panel photo
+                keyboard = [
+                    [InlineKeyboardButton("✏️ Modifier Texte d'accueil", callback_data="admin_edit_welcome_text")],
+                    [InlineKeyboardButton("🖼️ Modifier Photo d'accueil", callback_data="admin_edit_welcome_photo")],
+                    [InlineKeyboardButton("🗑️ Supprimer Photo d'accueil", callback_data="admin_delete_welcome_photo")],
+                    [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+                ]
+                markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(
+                    "✅ Photo d'accueil mise à jour !\n\n🖼️ Panel Admin Photo :",
+                    reply_markup=markup
+                )
+            else:
+                await update.message.reply_text("❌ Veuillez envoyer une photo (pas un fichier).")
+        else:
+            # Gestion du texte (contact, services, welcome_text)
+            data[section] = update.message.text
+            save_data(data)
+            context.user_data["editing"] = None
+            
+            if section == "welcome_text":
+                # Retour au panel photo
+                keyboard = [
+                    [InlineKeyboardButton("✏️ Modifier Texte d'accueil", callback_data="admin_edit_welcome_text")],
+                    [InlineKeyboardButton("🖼️ Modifier Photo d'accueil", callback_data="admin_edit_welcome_photo")],
+                    [InlineKeyboardButton("🗑️ Supprimer Photo d'accueil", callback_data="admin_delete_welcome_photo")],
+                    [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+                ]
+                markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(
+                    f"✅ Texte d'accueil mis à jour !\n\n🖼️ Panel Admin Photo :",
+                    reply_markup=markup
+                )
+            else:
+                # Retour au menu admin principal
+                keyboard = [
+                    [
+                        InlineKeyboardButton("✏️ Modifier Contact", callback_data="admin_edit_contact"),
+                        InlineKeyboardButton("✏️ Modifier Services", callback_data="admin_edit_services")
+                    ],
+                    [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
+                    [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
+                ]
+                markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(
+                    f"✅ Texte '{section}' mis à jour !\n\n⚙️ Panneau Admin :",
+                    reply_markup=markup
+                )
     else:
         await update.message.reply_text("Commande non reconnue.")
 
 
-# --- Gestion du texte (mot de passe ou actions admin) ---
+# --- Gestion du texte et des photos (mot de passe ou actions admin) ---
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await check_password(update, context):
         return
     await admin_actions(update, context)
+
+# --- Gestion des photos ---
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if user_id not in admins:
+        return
+    
+    section = context.user_data.get("editing")
+    if section == "welcome_photo":
+        # Prendre la photo de plus haute qualité
+        photo = update.message.photo[-1]
+        data["welcome_photo"] = photo.file_id
+        save_data(data)
+        context.user_data["editing"] = None
+        
+        # Retour au panel photo
+        keyboard = [
+            [InlineKeyboardButton("✏️ Modifier Texte d'accueil", callback_data="admin_edit_welcome_text")],
+            [InlineKeyboardButton("🖼️ Modifier Photo d'accueil", callback_data="admin_edit_welcome_photo")],
+            [InlineKeyboardButton("🗑️ Supprimer Photo d'accueil", callback_data="admin_delete_welcome_photo")],
+            [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            "✅ Photo d'accueil mise à jour !\n\n🖼️ Panel Admin Photo :",
+            reply_markup=markup
+        )
 
 
 # --- Fonction principale ---
@@ -216,6 +365,7 @@ def main():
     app.add_handler(CommandHandler("admin", admin))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
     print("🤖 Bot en marche...")
     app.run_polling()
