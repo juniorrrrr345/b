@@ -1,4 +1,5 @@
 import json
+import os
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -15,9 +16,10 @@ from telegram.ext import (
     ContextTypes,
 )
 
-TOKEN = "TON_TOKEN_ICI"         # ← Ton token Telegram
-ADMIN_PASSWORD = "1234"         # ← Ton mot de passe admin
-DATA_FILE = "data.json"         # ← Fichier pour stocker les textes
+# Configuration depuis les variables d'environnement
+TOKEN = os.getenv("TELEGRAM_TOKEN", "TON_TOKEN_ICI")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1234")
+DATA_FILE = os.getenv("DATA_FILE", "data.json")
 
 
 # --- Charger les données depuis le fichier JSON ---
