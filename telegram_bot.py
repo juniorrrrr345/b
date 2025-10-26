@@ -129,6 +129,63 @@ async def clear_all_bot_messages(context):
 data = load_data()
 admins = set()  # liste des ID admins connectés
 
+# --- Fonction utilitaire pour l'édition sécurisée de messages ---
+async def safe_edit_message(query, text, reply_markup=None, parse_mode=None):
+    """Édite un message de manière sécurisée avec gestion d'erreurs"""
+    try:
+        await query.edit_message_text(
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode
+        )
+    except Exception as e:
+        # Si l'édition échoue, envoyer un nouveau message
+        try:
+            await query.message.reply_text(
+                text=text,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode
+            )
+        except Exception as e2:
+            print(f"Erreur lors de l'envoi du message: {e2}")
+            await query.answer("❌ Erreur lors de l'affichage du contenu")
+
+async def safe_edit_message_media(query, media, reply_markup=None):
+    """Édite un message média de manière sécurisée avec gestion d'erreurs"""
+    try:
+        await query.edit_message_media(
+            media=media,
+            reply_markup=reply_markup
+        )
+    except Exception as e:
+        # Si l'édition du média échoue, essayer d'éditer le texte
+        try:
+            caption = media.caption if hasattr(media, 'caption') else ""
+            await safe_edit_message(
+                query,
+                text=f"{caption}\n\n🖼️ *Média disponible*",
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        except Exception as e2:
+            # Si tout échoue, envoyer un nouveau message
+            try:
+                if hasattr(media, 'media'):
+                    await query.message.reply_photo(
+                        photo=media.media,
+                        caption=media.caption,
+                        reply_markup=reply_markup
+                    )
+                else:
+                    await query.message.reply_text(
+                        text=f"{media.caption}\n\n🖼️ *Média disponible*",
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+            except Exception as e3:
+                print(f"Erreur lors de l'affichage du média: {e3}")
+                await query.answer("❌ Erreur lors de l'affichage du contenu")
+
 
 # --- Commande /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -196,31 +253,65 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         welcome_photo = data.get("welcome_photo")
         
         if welcome_photo:
-            # Si on a une photo d'accueil, on doit d'abord supprimer l'ancien message et en créer un nouveau
+            # Si on a une photo d'accueil, essayer d'éditer le média
             try:
                 await query.edit_message_media(
                     media=InputMediaPhoto(media=welcome_photo, caption=welcome_text),
                     reply_markup=reply_markup
                 )
-            except:
-                # Si ça ne marche pas, on utilise edit_message_text
-                await query.edit_message_text(
-                    f"{welcome_text}\n\n🖼️ *Photo d'accueil disponible*",
-                    reply_markup=reply_markup,
-                    parse_mode="Markdown"
-                )
+            except Exception as e:
+                # Si l'édition du média échoue, essayer d'éditer le texte
+                try:
+                    await safe_edit_message(
+                        query,
+                        f"{welcome_text}\n\n🖼️ *Photo d'accueil disponible*",
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+                except Exception as e2:
+                    # Si tout échoue, envoyer un nouveau message
+                    try:
+                        await query.message.reply_photo(
+                            photo=welcome_photo,
+                            caption=welcome_text,
+                            reply_markup=reply_markup
+                        )
+                    except Exception as e3:
+                        print(f"Erreur lors de l'affichage de la photo: {e3}")
+                        await query.answer("Erreur lors de l'affichage du contenu")
         else:
-            await query.edit_message_text(
-                welcome_text,
-                reply_markup=reply_markup,
-            )
+            try:
+                await safe_edit_message(
+                    query,
+                    welcome_text,
+                    reply_markup=reply_markup
+                )
+            except Exception as e:
+                # Si l'édition échoue, envoyer un nouveau message
+                try:
+                    await query.message.reply_text(
+                        welcome_text,
+                        reply_markup=reply_markup
+                    )
+                except Exception as e2:
+                    print(f"Erreur lors de l'envoi du message: {e2}")
+                    await query.answer("Erreur lors de l'affichage du contenu")
     else:
         content = data.get(query.data, "Texte non défini.")
         keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="back_to_main")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Toujours utiliser edit_message_text pour les callbacks normaux
-        await query.edit_message_text(text=content, reply_markup=reply_markup)
+        # Gestion d'erreurs pour l'édition de messages
+        try:
+            await safe_edit_message(query, text=content, reply_markup=reply_markup)
+        except Exception as e:
+            # Si l'édition échoue (message photo ou contenu identique), envoyer un nouveau message
+            try:
+                await query.message.reply_text(text=content, reply_markup=reply_markup)
+            except Exception as e2:
+                print(f"Erreur lors de l'envoi du message: {e2}")
+                # En dernier recours, répondre au callback
+                await query.answer("Erreur lors de l'affichage du contenu")
 
 
 # --- Commande /admin ---
@@ -264,29 +355,46 @@ async def check_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     if user_id not in admins:
-        await query.edit_message_text("❌ Vous n'êtes pas autorisé à utiliser cette fonction.")
+        try:
+            await safe_edit_message(query, "❌ Vous n'êtes pas autorisé à utiliser cette fonction.")
+        except:
+            await query.answer("❌ Accès refusé")
         return
+    
+    # Gestion d'erreurs globale pour les callbacks admin
+    try:
+        await handle_admin_callback_internal(query, context)
+    except Exception as e:
+        print(f"Erreur dans handle_admin_callback: {e}")
+        try:
+            await query.answer("❌ Erreur lors du traitement de la requête")
+        except:
+            pass
+
+async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TYPE):
     
     if query.data == "admin_edit_contact":
         keyboard = [[InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]]
         markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
+        await safe_edit_message(
+            query,
             "✏️ **Modification du Contact**\n\n"
             "Envoie le nouveau texte pour *Contact* :\n\n"
             f"*Texte actuel :*\n{data.get('contact', 'Aucun texte défini')}",
-            parse_mode="Markdown",
-            reply_markup=markup
+            reply_markup=markup,
+            parse_mode="Markdown"
         )
         context.user_data["editing"] = "contact"
     elif query.data == "admin_edit_services":
         keyboard = [[InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]]
         markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
+        await safe_edit_message(
+            query,
             "✏️ **Modification des Services**\n\n"
             "Envoie le nouveau texte pour *Services* :\n\n"
             f"*Texte actuel :*\n{data.get('services', 'Aucun texte défini')}",
-            parse_mode="Markdown",
-            reply_markup=markup
+            reply_markup=markup,
+            parse_mode="Markdown"
         )
         context.user_data["editing"] = "services"
     elif query.data == "admin_photo_panel":
@@ -299,33 +407,36 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
         markup = InlineKeyboardMarkup(keyboard)
         current_photo = data.get("welcome_photo")
         photo_status = "✅ Photo définie" if current_photo else "❌ Aucune photo"
-        await query.edit_message_text(
+        await safe_edit_message(
+            query,
             f"🖼️ **Panel Admin Photo**\n\n"
             f"*Texte d'accueil actuel :*\n{data.get('welcome_text', 'Aucun texte défini')}\n\n"
             f"*Photo d'accueil :* {photo_status}",
-            parse_mode="Markdown",
-            reply_markup=markup
+            reply_markup=markup,
+            parse_mode="Markdown"
         )
     elif query.data == "admin_edit_welcome_text":
         keyboard = [[InlineKeyboardButton("🔙 Retour au panel photo", callback_data="admin_photo_panel")]]
         markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
+        await safe_edit_message(
+            query,
             "✏️ **Modification du Texte d'accueil**\n\n"
             "Envoie le nouveau texte pour l'accueil :\n\n"
             f"*Texte actuel :*\n{data.get('welcome_text', 'Aucun texte défini')}",
-            parse_mode="Markdown",
-            reply_markup=markup
+            reply_markup=markup,
+            parse_mode="Markdown"
         )
         context.user_data["editing"] = "welcome_text"
     elif query.data == "admin_edit_welcome_photo":
         keyboard = [[InlineKeyboardButton("🔙 Retour au panel photo", callback_data="admin_photo_panel")]]
         markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
+        await safe_edit_message(
+            query,
             "🖼️ **Modification de la Photo d'accueil**\n\n"
             "Envoie la nouvelle photo pour l'accueil :\n\n"
             "*Note :* Envoie une image en tant que photo (pas en tant que fichier)",
-            parse_mode="Markdown",
-            reply_markup=markup
+            reply_markup=markup,
+            parse_mode="Markdown"
         )
         context.user_data["editing"] = "welcome_photo"
     elif query.data == "admin_delete_welcome_photo":
@@ -338,12 +449,13 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
         ]
         markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
+        await safe_edit_message(
+            query,
             "✅ **Photo d'accueil supprimée !**\n\n"
             f"*Texte d'accueil actuel :*\n{data.get('welcome_text', 'Aucun texte défini')}\n\n"
             f"*Photo d'accueil :* ❌ Aucune photo",
-            parse_mode="Markdown",
-            reply_markup=markup
+            reply_markup=markup,
+            parse_mode="Markdown"
         )
     elif query.data == "admin_message_panel":
         users_data = load_users()
@@ -357,27 +469,30 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
         ]
         markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
+        await safe_edit_message(
+            query,
             f"📢 **Panel Message**\n\n"
             f"*Utilisateurs enregistrés :* {total_users}\n"
             f"*Messages reçus :* {total_messages}\n\n"
             "Choisissez une action :",
-            parse_mode="Markdown",
-            reply_markup=markup
+            reply_markup=markup,
+            parse_mode="Markdown"
         )
     elif query.data == "admin_broadcast_message":
         keyboard = [[InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")]]
         markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
+        await safe_edit_message(
+            query,
             "📤 **Envoi de message à tous les utilisateurs**\n\n"
             "Envoie le message que tu veux diffuser à tous les utilisateurs :",
-            parse_mode="Markdown",
-            reply_markup=markup
+            reply_markup=markup,
+            parse_mode="Markdown"
         )
         context.user_data["editing"] = "broadcast_message"
     elif query.data == "admin_clear_messages":
         # Afficher un message de traitement
-        await query.edit_message_text(
+        await safe_edit_message(
+            query,
             "🗑️ **Suppression en cours...**\n\n"
             "Suppression de tous les messages du bot avec les utilisateurs...\n"
             "Cela peut prendre quelques instants.",
@@ -399,7 +514,8 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
         ]
         markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
+        await safe_edit_message(
+            query,
             f"✅ **Suppression terminée !**\n\n"
             f"*Messages supprimés :* {deleted_count}\n"
             f"*Messages stockés supprimés :* Tous\n\n"
@@ -407,8 +523,8 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
             f"*Utilisateurs enregistrés :* {len(users_data['users'])}\n"
             f"*Messages reçus :* 0\n\n"
             "Choisissez une action :",
-            parse_mode="Markdown",
-            reply_markup=markup
+            reply_markup=markup,
+            parse_mode="Markdown"
         )
     elif query.data == "admin_view_messages":
         users_data = load_users()
@@ -417,11 +533,12 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
         if not messages:
             keyboard = [[InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")]]
             markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(
+            await safe_edit_message(
+                query,
                 "📊 **Messages reçus**\n\n"
                 "Aucun message reçu pour le moment.",
-                parse_mode="Markdown",
-                reply_markup=markup
+                reply_markup=markup,
+                parse_mode="Markdown"
             )
         else:
             # Afficher les 10 derniers messages
@@ -437,10 +554,11 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
             
             keyboard = [[InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")]]
             markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(
+            await safe_edit_message(
+                query,
                 message_text,
-                parse_mode="Markdown",
-                reply_markup=markup
+                reply_markup=markup,
+                parse_mode="Markdown"
             )
     elif query.data == "admin_panel":
         keyboard = [
@@ -453,7 +571,7 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
         ]
         markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("⚙️ Panneau Admin :", reply_markup=markup)
+        await safe_edit_message(query, "⚙️ Panneau Admin :", reply_markup=markup)
     elif query.data == "admin_quit":
         admins.discard(user_id)
         context.user_data.clear()
@@ -464,9 +582,10 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
+        await safe_edit_message(
+            query,
             "✅ Déconnecté du mode admin.\n\n👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :",
-            reply_markup=reply_markup,
+            reply_markup=reply_markup
         )
 
 
