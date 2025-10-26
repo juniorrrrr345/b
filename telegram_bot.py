@@ -19,6 +19,7 @@ from telegram.ext import (
 TOKEN = os.getenv("TELEGRAM_TOKEN", "TON_TOKEN_ICI")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1234")
 DATA_FILE = os.getenv("DATA_FILE", "data.json")
+USERS_FILE = os.getenv("USERS_FILE", "users.json")
 
 
 # --- Charger les données depuis le fichier JSON ---
@@ -41,6 +42,48 @@ def save_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
 
+# --- Gestion des utilisateurs ---
+def load_users():
+    try:
+        with open(USERS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {"users": [], "messages": []}
+
+def save_users(users_data):
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(users_data, f, ensure_ascii=False, indent=2)
+
+def add_user(user_id, username, first_name, last_name):
+    users_data = load_users()
+    user_info = {
+        "user_id": user_id,
+        "username": username,
+        "first_name": first_name,
+        "last_name": last_name
+    }
+    
+    # Vérifier si l'utilisateur existe déjà
+    for user in users_data["users"]:
+        if user["user_id"] == user_id:
+            return
+    
+    users_data["users"].append(user_info)
+    save_users(users_data)
+
+def add_message(user_id, username, first_name, last_name, message_text, timestamp):
+    users_data = load_users()
+    message_info = {
+        "user_id": user_id,
+        "username": username,
+        "first_name": first_name,
+        "last_name": last_name,
+        "message": message_text,
+        "timestamp": timestamp
+    }
+    users_data["messages"].append(message_info)
+    save_users(users_data)
+
 
 data = load_data()
 admins = set()  # liste des ID admins connectés
@@ -48,6 +91,15 @@ admins = set()  # liste des ID admins connectés
 
 # --- Commande /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Enregistrer l'utilisateur
+    user = update.effective_user
+    add_user(
+        user.id,
+        user.username,
+        user.first_name,
+        user.last_name
+    )
+    
     keyboard = [
         [
             InlineKeyboardButton("📞 Contact", callback_data="contact"),
@@ -96,10 +148,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         welcome_photo = data.get("welcome_photo")
         
         if welcome_photo:
-            await query.edit_message_media(
-                media=InputMediaPhoto(media=welcome_photo, caption=welcome_text),
-                reply_markup=reply_markup
-            )
+            # Si on a une photo d'accueil, on doit d'abord supprimer l'ancien message et en créer un nouveau
+            try:
+                await query.edit_message_media(
+                    media=InputMediaPhoto(media=welcome_photo, caption=welcome_text),
+                    reply_markup=reply_markup
+                )
+            except:
+                # Si ça ne marche pas, on utilise edit_message_text
+                await query.edit_message_text(
+                    f"{welcome_text}\n\n🖼️ *Photo d'accueil disponible*",
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
         else:
             await query.edit_message_text(
                 welcome_text,
@@ -109,6 +170,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         content = data.get(query.data, "Texte non défini.")
         keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="back_to_main")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Toujours utiliser edit_message_text pour les callbacks normaux
         await query.edit_message_text(text=content, reply_markup=reply_markup)
 
 
@@ -131,6 +194,7 @@ async def check_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     InlineKeyboardButton("✏️ Modifier Services", callback_data="admin_edit_services")
                 ],
                 [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
+                [InlineKeyboardButton("📢 Message", callback_data="admin_message_panel")],
                 [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
             ]
             markup = InlineKeyboardMarkup(keyboard)
@@ -226,6 +290,89 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown",
             reply_markup=markup
         )
+    elif query.data == "admin_message_panel":
+        users_data = load_users()
+        total_users = len(users_data["users"])
+        total_messages = len(users_data["messages"])
+        
+        keyboard = [
+            [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
+            [InlineKeyboardButton("🗑️ Supprimer tous les messages", callback_data="admin_clear_messages")],
+            [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
+            [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            f"📢 **Panel Message**\n\n"
+            f"*Utilisateurs enregistrés :* {total_users}\n"
+            f"*Messages reçus :* {total_messages}\n\n"
+            "Choisissez une action :",
+            parse_mode="Markdown",
+            reply_markup=markup
+        )
+    elif query.data == "admin_broadcast_message":
+        keyboard = [[InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            "📤 **Envoi de message à tous les utilisateurs**\n\n"
+            "Envoie le message que tu veux diffuser à tous les utilisateurs :",
+            parse_mode="Markdown",
+            reply_markup=markup
+        )
+        context.user_data["editing"] = "broadcast_message"
+    elif query.data == "admin_clear_messages":
+        users_data = load_users()
+        users_data["messages"] = []
+        save_users(users_data)
+        
+        keyboard = [
+            [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
+            [InlineKeyboardButton("🗑️ Supprimer tous les messages", callback_data="admin_clear_messages")],
+            [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
+            [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            "✅ **Tous les messages privés ont été supprimés !**\n\n"
+            "📢 **Panel Message**\n\n"
+            f"*Utilisateurs enregistrés :* {len(users_data['users'])}\n"
+            f"*Messages reçus :* 0\n\n"
+            "Choisissez une action :",
+            parse_mode="Markdown",
+            reply_markup=markup
+        )
+    elif query.data == "admin_view_messages":
+        users_data = load_users()
+        messages = users_data["messages"]
+        
+        if not messages:
+            keyboard = [[InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                "📊 **Messages reçus**\n\n"
+                "Aucun message reçu pour le moment.",
+                parse_mode="Markdown",
+                reply_markup=markup
+            )
+        else:
+            # Afficher les 10 derniers messages
+            recent_messages = messages[-10:]
+            message_text = "📊 **Messages reçus** (10 derniers)\n\n"
+            
+            for i, msg in enumerate(recent_messages, 1):
+                username = f"@{msg['username']}" if msg['username'] else "Sans username"
+                name = f"{msg['first_name']} {msg['last_name']}".strip()
+                message_text += f"**{i}.** {name} ({username})\n"
+                message_text += f"ID: `{msg['user_id']}`\n"
+                message_text += f"Message: {msg['message'][:100]}{'...' if len(msg['message']) > 100 else ''}\n\n"
+            
+            keyboard = [[InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                message_text,
+                parse_mode="Markdown",
+                reply_markup=markup
+            )
     elif query.data == "admin_panel":
         keyboard = [
             [
@@ -233,6 +380,7 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton("✏️ Modifier Services", callback_data="admin_edit_services")
             ],
             [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
+            [InlineKeyboardButton("📢 Message", callback_data="admin_message_panel")],
             [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
         ]
         markup = InlineKeyboardMarkup(keyboard)
@@ -285,6 +433,43 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 await update.message.reply_text("❌ Veuillez envoyer une photo (pas un fichier).")
+        elif section == "broadcast_message":
+            # Envoi du message à tous les utilisateurs
+            users_data = load_users()
+            users = users_data["users"]
+            message_text = update.message.text
+            context.user_data["editing"] = None
+            
+            sent_count = 0
+            failed_count = 0
+            
+            for user in users:
+                try:
+                    await context.bot.send_message(
+                        chat_id=user["user_id"],
+                        text=message_text
+                    )
+                    sent_count += 1
+                except Exception as e:
+                    failed_count += 1
+                    print(f"Erreur envoi à {user['user_id']}: {e}")
+            
+            # Retour au panel message
+            keyboard = [
+                [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
+                [InlineKeyboardButton("🗑️ Supprimer tous les messages", callback_data="admin_clear_messages")],
+                [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
+                [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+            ]
+            markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                f"✅ **Message diffusé !**\n\n"
+                f"*Envoyé à :* {sent_count} utilisateurs\n"
+                f"*Échecs :* {failed_count} utilisateurs\n\n"
+                "📢 **Panel Message**",
+                parse_mode="Markdown",
+                reply_markup=markup
+            )
         else:
             # Gestion du texte (contact, services, welcome_text)
             data[section] = update.message.text
@@ -312,6 +497,7 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         InlineKeyboardButton("✏️ Modifier Services", callback_data="admin_edit_services")
                     ],
                     [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
+                    [InlineKeyboardButton("📢 Message", callback_data="admin_message_panel")],
                     [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
                 ]
                 markup = InlineKeyboardMarkup(keyboard)
@@ -327,7 +513,27 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await check_password(update, context):
         return
-    await admin_actions(update, context)
+    
+    # Si c'est un admin, gérer les actions admin
+    if update.message.from_user.id in admins:
+        await admin_actions(update, context)
+        return
+    
+    # Si c'est un utilisateur normal, enregistrer son message
+    user = update.effective_user
+    add_message(
+        user.id,
+        user.username,
+        user.first_name,
+        user.last_name,
+        update.message.text,
+        str(update.effective_message.date)
+    )
+    
+    # Envoyer confirmation à l'utilisateur
+    await update.message.reply_text(
+        "✅ Votre message a été envoyé ! Nous vous répondrons bientôt."
+    )
 
 # --- Gestion des photos ---
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
