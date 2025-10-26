@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  telegram-bot:
+    build: .
+    container_name: telegram-bot
+    restart: unless-stopped
+    environment:
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-1234}
+      - DATA_FILE=data.json
+    volumes:
+      - ./data:/app/data
+      - ./data.json:/app/data.json
+    env_file:
+      - .env
+    # Pour le monitoring (optionnel)
+    ports:
+      - "8000:8000"

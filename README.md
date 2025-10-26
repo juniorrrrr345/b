@@ -8,8 +8,10 @@ Un bot Telegram simple avec un panneau d'administration pour modifier les textes
 - **Panneau d'administration** : Modification des textes en temps réel
 - **Sécurité** : Authentification par mot de passe pour l'admin
 - **Persistance** : Sauvegarde des données dans un fichier JSON
+- **Déploiement VPS** : Scripts de déploiement automatique
+- **Docker** : Support pour le déploiement en conteneur
 
-## Installation
+## Installation Locale
 
 1. **Installer les dépendances** :
    ```bash
@@ -18,13 +20,79 @@ Un bot Telegram simple avec un panneau d'administration pour modifier les textes
 
 2. **Configurer le bot** :
    - Obtenez un token depuis [@BotFather](https://t.me/botfather) sur Telegram
-   - Remplacez `TON_TOKEN_ICI` dans `telegram_bot.py` par votre token
-   - Modifiez le mot de passe admin `ADMIN_PASSWORD` si nécessaire
+   - Copiez `.env.example` vers `.env` et configurez vos valeurs
+   - Modifiez le mot de passe admin si nécessaire
 
 3. **Lancer le bot** :
    ```bash
    python telegram_bot.py
    ```
+
+## Déploiement sur VPS
+
+### Méthode 1 : Script de déploiement automatique
+
+1. **Préparer le VPS** :
+   ```bash
+   # Sur votre VPS Ubuntu/Debian
+   sudo apt update
+   sudo apt install python3 python3-pip python3-venv git
+   ```
+
+2. **Cloner et déployer** :
+   ```bash
+   git clone <votre-repo>
+   cd telegram-bot
+   chmod +x deploy.sh
+   ./deploy.sh
+   ```
+
+3. **Configurer le bot** :
+   ```bash
+   sudo nano /opt/telegram-bot/.env
+   # Ajoutez votre token Telegram
+   ```
+
+4. **Démarrer le service** :
+   ```bash
+   sudo systemctl start telegram-bot
+   sudo systemctl status telegram-bot
+   ```
+
+### Méthode 2 : Docker
+
+1. **Installer Docker** :
+   ```bash
+   curl -fsSL https://get.docker.com -o get-docker.sh
+   sudo sh get-docker.sh
+   sudo usermod -aG docker $USER
+   ```
+
+2. **Configurer et lancer** :
+   ```bash
+   cp .env.example .env
+   # Éditez .env avec vos valeurs
+   docker-compose up -d
+   ```
+
+### Gestion du service
+
+```bash
+# Démarrer le bot
+sudo systemctl start telegram-bot
+
+# Arrêter le bot
+sudo systemctl stop telegram-bot
+
+# Redémarrer le bot
+sudo systemctl restart telegram-bot
+
+# Voir les logs
+sudo journalctl -u telegram-bot -f
+
+# Statut du service
+sudo systemctl status telegram-bot
+```
 
 ## Utilisation
 
