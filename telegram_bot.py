@@ -1,5 +1,6 @@
 import json
 import os
+import asyncio
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -84,6 +85,46 @@ def add_message(user_id, username, first_name, last_name, message_text, timestam
     users_data["messages"].append(message_info)
     save_users(users_data)
 
+async def clear_all_bot_messages(context):
+    """Supprime tous les messages du bot avec tous les utilisateurs"""
+    users_data = load_users()
+    users = users_data["users"]
+    deleted_count = 0
+    
+    for user in users:
+        try:
+            chat_id = user["user_id"]
+            
+            # Essayer de supprimer les messages récents
+            # Note: L'API Telegram limite la suppression aux messages des 48 dernières heures
+            try:
+                # Récupérer les messages récents (limité à 100 pour éviter les timeouts)
+                message_ids = []
+                async for message in context.bot.iter_history(chat_id, limit=100):
+                    if message.from_user and message.from_user.id == context.bot.id:
+                        message_ids.append(message.message_id)
+                
+                # Supprimer les messages par lots pour éviter les limites de rate
+                for message_id in message_ids:
+                    try:
+                        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+                        deleted_count += 1
+                        # Petite pause pour éviter les limites de rate
+                        await asyncio.sleep(0.1)
+                    except Exception as e:
+                        # Ignorer les erreurs de suppression (message trop ancien, etc.)
+                        continue
+                        
+            except Exception as e:
+                # Si on ne peut pas accéder à l'historique, continuer
+                continue
+                    
+        except Exception as e:
+            print(f"Erreur lors de la suppression des messages pour {user['user_id']}: {e}")
+            continue
+    
+    return deleted_count
+
 
 data = load_data()
 admins = set()  # liste des ID admins connectés
@@ -99,6 +140,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user.first_name,
         user.last_name
     )
+    
+    # Supprimer l'ancien message s'il existe
+    if update.message.reply_to_message:
+        try:
+            await update.message.reply_to_message.delete()
+        except:
+            pass
     
     keyboard = [
         [
@@ -177,6 +225,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Commande /admin ---
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Supprimer l'ancien message s'il existe
+    if update.message.reply_to_message:
+        try:
+            await update.message.reply_to_message.delete()
+        except:
+            pass
+    
     await update.message.reply_text("🔐 Entrez le mot de passe admin :")
     context.user_data["awaiting_password"] = True
 
@@ -321,9 +376,21 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
         )
         context.user_data["editing"] = "broadcast_message"
     elif query.data == "admin_clear_messages":
+        # Afficher un message de traitement
+        await query.edit_message_text(
+            "🗑️ **Suppression en cours...**\n\n"
+            "Suppression de tous les messages du bot avec les utilisateurs...\n"
+            "Cela peut prendre quelques instants.",
+            parse_mode="Markdown"
+        )
+        
+        # Supprimer les messages stockés
         users_data = load_users()
         users_data["messages"] = []
         save_users(users_data)
+        
+        # Supprimer les messages du bot avec les utilisateurs
+        deleted_count = await clear_all_bot_messages(context)
         
         keyboard = [
             [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
@@ -333,7 +400,9 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
         ]
         markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
-            "✅ **Tous les messages privés ont été supprimés !**\n\n"
+            f"✅ **Suppression terminée !**\n\n"
+            f"*Messages supprimés :* {deleted_count}\n"
+            f"*Messages stockés supprimés :* Tous\n\n"
             "📢 **Panel Message**\n\n"
             f"*Utilisateurs enregistrés :* {len(users_data['users'])}\n"
             f"*Messages reçus :* 0\n\n"
