@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}Produits - Ma Boutique{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row">
+        <!-- Filtres -->
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-filter"></i> Filtres</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Recherche -->
+                    <div class="mb-3">
+                        <label for="search" class="form-label">Rechercher</label>
+                        <input type="text" class="form-control" id="search" 
+                               value="{{ search_term }}" placeholder="Nom du produit...">
+                    </div>
+                    
+                    <!-- Catégories -->
+                    <div class="mb-3">
+                        <label class="form-label">Catégorie</label>
+                        <div class="list-group list-group-flush">
+                            <a href="{{ url_for('products') }}" 
+                               class="list-group-item list-group-item-action {% if not current_category %}active{% endif %}">
+                                Toutes les catégories
+                            </a>
+                            {% for category in categories %}
+                                <a href="{{ url_for('products', category=category[0]) }}" 
+                                   class="list-group-item list-group-item-action {% if current_category == category[0] %}active{% endif %}">
+                                    {{ category[0] }}
+                                </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Produits -->
+        <div class="col-md-9">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>
+                    {% if current_category %}
+                        {{ current_category }}
+                    {% else %}
+                        Tous les produits
+                    {% endif %}
+                    <small class="text-muted">({{ products|length }} produit{{ 's' if products|length > 1 else '' }})</small>
+                </h2>
+                
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-sort"></i> Trier par
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" data-sort="name">Nom A-Z</a></li>
+                        <li><a class="dropdown-item" href="#" data-sort="name-desc">Nom Z-A</a></li>
+                        <li><a class="dropdown-item" href="#" data-sort="price">Prix croissant</a></li>
+                        <li><a class="dropdown-item" href="#" data-sort="price-desc">Prix décroissant</a></li>
+                    </ul>
+                </div>
+            </div>
+            
+            {% if products %}
+                <div class="row" id="products-container">
+                    {% for product in products %}
+                        <div class="col-lg-4 col-md-6 mb-4 product-item" 
+                             data-name="{{ product.name|lower }}" 
+                             data-price="{{ product.price }}">
+                            <div class="card h-100 product-card">
+                                <div class="position-relative">
+                                    <img src="{{ product.image_url or 'https://via.placeholder.com/300x200?text=Produit' }}" 
+                                         class="card-img-top" alt="{{ product.name }}">
+                                    {% if product.stock == 0 %}
+                                        <div class="position-absolute top-0 end-0 m-2">
+                                            <span class="badge bg-danger">Rupture de stock</span>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                <div class="card-body d-flex flex-column">
+                                    <h5 class="card-title">{{ product.name }}</h5>
+                                    <p class="card-text text-muted">{{ product.description[:100] }}{% if product.description|length > 100 %}...{% endif %}</p>
+                                    <div class="mt-auto">
+                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                            <span class="h5 text-primary">{{ "%.2f"|format(product.price) }} €</span>
+                                            <small class="text-muted">Stock: {{ product.stock }}</small>
+                                        </div>
+                                        <div class="d-grid gap-2">
+                                            <a href="{{ url_for('product_detail', product_id=product.id) }}" 
+                                               class="btn btn-outline-primary">
+                                                <i class="fas fa-eye"></i> Voir détails
+                                            </a>
+                                            {% if product.stock > 0 %}
+                                                <button class="btn btn-primary add-to-cart" 
+                                                        data-product-id="{{ product.id }}">
+                                                    <i class="fas fa-cart-plus"></i> Ajouter au panier
+                                                </button>
+                                            {% else %}
+                                                <button class="btn btn-secondary" disabled>
+                                                    <i class="fas fa-times"></i> Indisponible
+                                                </button>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                    <h4 class="text-muted">Aucun produit trouvé</h4>
+                    <p class="text-muted">
+                        {% if search_term %}
+                            Aucun produit ne correspond à "{{ search_term }}"
+                        {% elif current_category %}
+                            Aucun produit dans la catégorie "{{ current_category }}"
+                        {% else %}
+                            Aucun produit disponible pour le moment
+                        {% endif %}
+                    </p>
+                    <a href="{{ url_for('products') }}" class="btn btn-primary">
+                        Voir tous les produits
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Recherche en temps réel
+document.getElementById('search').addEventListener('input', function() {
+    const searchTerm = this.value.toLowerCase();
+    const products = document.querySelectorAll('.product-item');
+    
+    products.forEach(product => {
+        const name = product.dataset.name;
+        if (name.includes(searchTerm)) {
+            product.style.display = 'block';
+        } else {
+            product.style.display = 'none';
+        }
+    });
+});
+
+// Tri des produits
+document.querySelectorAll('[data-sort]').forEach(button => {
+    button.addEventListener('click', function(e) {
+        e.preventDefault();
+        const sortBy = this.dataset.sort;
+        const container = document.getElementById('products-container');
+        const products = Array.from(container.children);
+        
+        products.sort((a, b) => {
+            switch(sortBy) {
+                case 'name':
+                    return a.dataset.name.localeCompare(b.dataset.name);
+                case 'name-desc':
+                    return b.dataset.name.localeCompare(a.dataset.name);
+                case 'price':
+                    return parseFloat(a.dataset.price) - parseFloat(b.dataset.price);
+                case 'price-desc':
+                    return parseFloat(b.dataset.price) - parseFloat(a.dataset.price);
+                default:
+                    return 0;
+            }
+        });
+        
+        // Réorganiser les éléments
+        products.forEach(product => container.appendChild(product));
+    });
+});
+
+// Ajouter au panier (même code que dans index.html)
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.add-to-cart').forEach(button => {
+        button.addEventListener('click', function() {
+            const productId = this.dataset.productId;
+            
+            fetch('/add_to_cart', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    product_id: productId,
+                    quantity: 1
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    this.innerHTML = '<i class="fas fa-check"></i> Ajouté !';
+                    this.classList.remove('btn-primary');
+                    this.classList.add('btn-success');
+                    
+                    setTimeout(() => {
+                        this.innerHTML = '<i class="fas fa-cart-plus"></i> Ajouter au panier';
+                        this.classList.remove('btn-success');
+                        this.classList.add('btn-primary');
+                    }, 2000);
+                } else {
+                    alert('Erreur: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                alert('Une erreur est survenue');
+            });
+        });
+    });
+});
+</script>
+{% endblock %}

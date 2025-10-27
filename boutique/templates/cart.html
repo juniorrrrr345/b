@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block title %}Panier - Ma Boutique{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <h1><i class="fas fa-shopping-cart"></i> Mon panier</h1>
+    
+    {% if cart_items %}
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-body">
+                        {% for item in cart_items %}
+                            <div class="row align-items-center mb-3 cart-item" data-product-id="{{ item.product.id }}">
+                                <div class="col-md-2">
+                                    <img src="{{ item.product.image_url or 'https://via.placeholder.com/100x100?text=Produit' }}" 
+                                         class="img-fluid rounded" alt="{{ item.product.name }}">
+                                </div>
+                                <div class="col-md-4">
+                                    <h5 class="mb-1">{{ item.product.name }}</h5>
+                                    <p class="text-muted mb-0">{{ item.product.category }}</p>
+                                    <small class="text-muted">Stock: {{ item.product.stock }}</small>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Quantité</label>
+                                    <input type="number" class="form-control quantity-input" 
+                                           value="{{ item.quantity }}" min="1" max="{{ item.product.stock }}">
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="text-center">
+                                        <div class="h5 text-primary item-price">{{ "%.2f"|format(item.product.price) }} €</div>
+                                        <div class="h6 text-muted item-total">{{ "%.2f"|format(item.total) }} €</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <button class="btn btn-outline-danger btn-sm remove-item">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            {% if not loop.last %}
+                                <hr>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-calculator"></i> Résumé de la commande</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Sous-total:</span>
+                            <span id="subtotal">{{ "%.2f"|format(total) }} €</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Livraison:</span>
+                            <span id="shipping">
+                                {% if total >= 50 %}
+                                    <span class="text-success">Gratuite</span>
+                                {% else %}
+                                    <span>9.99 €</span>
+                                {% endif %}
+                            </span>
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between mb-3">
+                            <strong>Total:</strong>
+                            <strong id="total">{{ "%.2f"|format(total + (0 if total >= 50 else 9.99)) }} €</strong>
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            <a href="{{ url_for('checkout') }}" class="btn btn-primary btn-lg">
+                                <i class="fas fa-credit-card"></i> Passer commande
+                            </a>
+                            <a href="{{ url_for('products') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left"></i> Continuer mes achats
+                            </a>
+                        </div>
+                        
+                        {% if total < 50 %}
+                            <div class="alert alert-info mt-3">
+                                <small>
+                                    <i class="fas fa-info-circle"></i>
+                                    Ajoutez {{ "%.2f"|format(50 - total) }} € pour bénéficier de la livraison gratuite !
+                                </small>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i>
+            <h4 class="text-muted">Votre panier est vide</h4>
+            <p class="text-muted">Découvrez nos produits et ajoutez-les à votre panier !</p>
+            <a href="{{ url_for('products') }}" class="btn btn-primary btn-lg">
+                <i class="fas fa-shopping-bag"></i> Voir nos produits
+            </a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Mise à jour de la quantité
+    document.querySelectorAll('.quantity-input').forEach(input => {
+        input.addEventListener('change', function() {
+            const productId = this.closest('.cart-item').dataset.productId;
+            const quantity = parseInt(this.value);
+            
+            updateCartItem(productId, quantity);
+        });
+    });
+    
+    // Suppression d'un article
+    document.querySelectorAll('.remove-item').forEach(button => {
+        button.addEventListener('click', function() {
+            const productId = this.closest('.cart-item').dataset.productId;
+            removeCartItem(productId);
+        });
+    });
+});
+
+function updateCartItem(productId, quantity) {
+    fetch('/update_cart', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            product_id: productId,
+            quantity: quantity
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Recharger la page pour mettre à jour les totaux
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('Une erreur est survenue');
+    });
+}
+
+function removeCartItem(productId) {
+    if (confirm('Êtes-vous sûr de vouloir supprimer cet article du panier ?')) {
+        fetch('/update_cart', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                product_id: productId,
+                quantity: 0
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Supprimer l'élément du DOM
+                const cartItem = document.querySelector(`[data-product-id="${productId}"]`);
+                if (cartItem) {
+                    cartItem.remove();
+                }
+                
+                // Recharger la page si le panier est vide
+                if (document.querySelectorAll('.cart-item').length === 0) {
+                    location.reload();
+                } else {
+                    // Recalculer les totaux
+                    calculateTotals();
+                }
+            } else {
+                alert('Erreur: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            alert('Une erreur est survenue');
+        });
+    }
+}
+
+function calculateTotals() {
+    let subtotal = 0;
+    
+    document.querySelectorAll('.cart-item').forEach(item => {
+        const quantity = parseInt(item.querySelector('.quantity-input').value);
+        const price = parseFloat(item.querySelector('.item-price').textContent);
+        const total = quantity * price;
+        
+        item.querySelector('.item-total').textContent = total.toFixed(2) + ' €';
+        subtotal += total;
+    });
+    
+    document.getElementById('subtotal').textContent = subtotal.toFixed(2) + ' €';
+    
+    const shipping = subtotal >= 50 ? 0 : 9.99;
+    const total = subtotal + shipping;
+    
+    document.getElementById('total').textContent = total.toFixed(2) + ' €';
+    
+    // Mettre à jour l'affichage de la livraison
+    const shippingElement = document.getElementById('shipping');
+    if (subtotal >= 50) {
+        shippingElement.innerHTML = '<span class="text-success">Gratuite</span>';
+    } else {
+        shippingElement.innerHTML = '9.99 €';
+    }
+}
+</script>
+{% endblock %}

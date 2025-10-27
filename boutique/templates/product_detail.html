@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product.name }} - Ma Boutique{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Accueil</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('products') }}">Produits</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ product.name }}</li>
+        </ol>
+    </nav>
+    
+    <div class="row">
+        <!-- Image du produit -->
+        <div class="col-md-6">
+            <div class="product-image-container">
+                <img src="{{ product.image_url or 'https://via.placeholder.com/500x400?text=Produit' }}" 
+                     class="img-fluid rounded" alt="{{ product.name }}" id="main-image">
+            </div>
+        </div>
+        
+        <!-- Informations du produit -->
+        <div class="col-md-6">
+            <div class="product-info">
+                <h1 class="product-title">{{ product.name }}</h1>
+                
+                <div class="product-price mb-3">
+                    <span class="h2 text-primary">{{ "%.2f"|format(product.price) }} €</span>
+                </div>
+                
+                <div class="product-stock mb-3">
+                    {% if product.stock > 0 %}
+                        <span class="badge bg-success">
+                            <i class="fas fa-check"></i> En stock ({{ product.stock }} disponible{{ 's' if product.stock > 1 else '' }})
+                        </span>
+                    {% else %}
+                        <span class="badge bg-danger">
+                            <i class="fas fa-times"></i> Rupture de stock
+                        </span>
+                    {% endif %}
+                </div>
+                
+                <div class="product-description mb-4">
+                    <h5>Description</h5>
+                    <p>{{ product.description }}</p>
+                </div>
+                
+                <div class="product-category mb-4">
+                    <strong>Catégorie:</strong> 
+                    <a href="{{ url_for('products', category=product.category) }}" class="text-decoration-none">
+                        {{ product.category }}
+                    </a>
+                </div>
+                
+                <!-- Actions -->
+                <div class="product-actions">
+                    {% if product.stock > 0 %}
+                        <div class="row mb-3">
+                            <div class="col-4">
+                                <label for="quantity" class="form-label">Quantité</label>
+                                <input type="number" class="form-control" id="quantity" value="1" min="1" max="{{ product.stock }}">
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-block">
+                            <button class="btn btn-primary btn-lg add-to-cart" data-product-id="{{ product.id }}">
+                                <i class="fas fa-cart-plus"></i> Ajouter au panier
+                            </button>
+                            <button class="btn btn-outline-primary btn-lg" onclick="buyNow()">
+                                <i class="fas fa-bolt"></i> Acheter maintenant
+                            </button>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            Ce produit est actuellement en rupture de stock.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Caractéristiques supplémentaires -->
+    <div class="row mt-5">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <ul class="nav nav-tabs card-header-tabs" id="product-tabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="details-tab" data-bs-toggle="tab" 
+                                    data-bs-target="#details" type="button" role="tab">
+                                <i class="fas fa-info-circle"></i> Détails
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="shipping-tab" data-bs-toggle="tab" 
+                                    data-bs-target="#shipping" type="button" role="tab">
+                                <i class="fas fa-truck"></i> Livraison
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="returns-tab" data-bs-toggle="tab" 
+                                    data-bs-target="#returns" type="button" role="tab">
+                                <i class="fas fa-undo"></i> Retours
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+                <div class="card-body">
+                    <div class="tab-content" id="product-tab-content">
+                        <div class="tab-pane fade show active" id="details" role="tabpanel">
+                            <h5>Caractéristiques du produit</h5>
+                            <ul class="list-unstyled">
+                                <li><strong>Nom:</strong> {{ product.name }}</li>
+                                <li><strong>Catégorie:</strong> {{ product.category }}</li>
+                                <li><strong>Prix:</strong> {{ "%.2f"|format(product.price) }} €</li>
+                                <li><strong>Stock disponible:</strong> {{ product.stock }} unité{{ 's' if product.stock > 1 else '' }}</li>
+                                <li><strong>Date d'ajout:</strong> {{ product.created_at.strftime('%d/%m/%Y') }}</li>
+                            </ul>
+                        </div>
+                        <div class="tab-pane fade" id="shipping" role="tabpanel">
+                            <h5>Informations de livraison</h5>
+                            <ul>
+                                <li>Livraison gratuite pour les commandes supérieures à 50€</li>
+                                <li>Délai de livraison: 24-48h</li>
+                                <li>Suivi de commande disponible</li>
+                                <li>Livraison sécurisée</li>
+                            </ul>
+                        </div>
+                        <div class="tab-pane fade" id="returns" role="tabpanel">
+                            <h5>Politique de retour</h5>
+                            <ul>
+                                <li>Retour gratuit sous 30 jours</li>
+                                <li>Produit doit être en état neuf</li>
+                                <li>Remboursement sous 5-7 jours ouverts</li>
+                                <li>Contactez-nous pour initier un retour</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function buyNow() {
+    const quantity = document.getElementById('quantity').value;
+    const productId = {{ product.id }};
+    
+    // Ajouter au panier
+    fetch('/add_to_cart', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            product_id: productId,
+            quantity: parseInt(quantity)
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Rediriger vers le panier
+            window.location.href = '/cart';
+        } else {
+            alert('Erreur: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('Une erreur est survenue');
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Ajouter au panier
+    document.querySelector('.add-to-cart').addEventListener('click', function() {
+        const productId = this.dataset.productId;
+        const quantity = document.getElementById('quantity').value;
+        
+        fetch('/add_to_cart', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                product_id: productId,
+                quantity: parseInt(quantity)
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Animation du bouton
+                this.innerHTML = '<i class="fas fa-check"></i> Ajouté !';
+                this.classList.remove('btn-primary');
+                this.classList.add('btn-success');
+                
+                // Mettre à jour le compteur de panier
+                updateCartCount();
+                
+                // Revenir à l'état normal après 2 secondes
+                setTimeout(() => {
+                    this.innerHTML = '<i class="fas fa-cart-plus"></i> Ajouter au panier';
+                    this.classList.remove('btn-success');
+                    this.classList.add('btn-primary');
+                }, 2000);
+            } else {
+                alert('Erreur: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            alert('Une erreur est survenue');
+        });
+    });
+});
+
+function updateCartCount() {
+    fetch('/api/cart_count')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('cart-count').textContent = data.count;
+        })
+        .catch(error => console.error('Erreur:', error));
+}
+</script>
+{% endblock %}

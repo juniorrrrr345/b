@@ -1,0 +1,369 @@
+{% extends "base.html" %}
+
+{% block title %}Administration - Ma Boutique{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <h1><i class="fas fa-cogs"></i> Administration</h1>
+    
+    <!-- Statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4>{{ products|length }}</h4>
+                            <p class="mb-0">Produits</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-box fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4>{{ orders|length }}</h4>
+                            <p class="mb-0">Commandes</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-shopping-cart fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4>{{ orders|selectattr('status', 'equalto', 'pending')|list|length }}</h4>
+                            <p class="mb-0">En attente</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-clock fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4>{{ "%.2f"|format(orders|sum(attribute='total_amount')) }} €</h4>
+                            <p class="mb-0">Chiffre d'affaires</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-euro-sign fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Onglets -->
+    <ul class="nav nav-tabs" id="admin-tabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="products-tab" data-bs-toggle="tab" 
+                    data-bs-target="#products" type="button" role="tab">
+                <i class="fas fa-box"></i> Produits
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="orders-tab" data-bs-toggle="tab" 
+                    data-bs-target="#orders" type="button" role="tab">
+                <i class="fas fa-shopping-cart"></i> Commandes
+            </button>
+        </li>
+    </ul>
+    
+    <div class="tab-content" id="admin-tab-content">
+        <!-- Gestion des produits -->
+        <div class="tab-pane fade show active" id="products" role="tabpanel">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5>Gestion des produits</h5>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addProductModal">
+                        <i class="fas fa-plus"></i> Ajouter un produit
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Image</th>
+                                    <th>Nom</th>
+                                    <th>Prix</th>
+                                    <th>Stock</th>
+                                    <th>Catégorie</th>
+                                    <th>Statut</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for product in products %}
+                                    <tr>
+                                        <td>{{ product.id }}</td>
+                                        <td>
+                                            <img src="{{ product.image_url or 'https://via.placeholder.com/50x50?text=IMG' }}" 
+                                                 class="img-thumbnail" style="width: 50px; height: 50px;">
+                                        </td>
+                                        <td>{{ product.name }}</td>
+                                        <td>{{ "%.2f"|format(product.price) }} €</td>
+                                        <td>{{ product.stock }}</td>
+                                        <td>{{ product.category }}</td>
+                                        <td>
+                                            {% if product.is_active %}
+                                                <span class="badge bg-success">Actif</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">Inactif</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-primary" 
+                                                    onclick="editProduct({{ product.id }})">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger" 
+                                                    onclick="deleteProduct({{ product.id }})">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Gestion des commandes -->
+        <div class="tab-pane fade" id="orders" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Commandes récentes</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Client</th>
+                                    <th>Total</th>
+                                    <th>Statut</th>
+                                    <th>Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for order in orders %}
+                                    <tr>
+                                        <td>{{ order.id }}</td>
+                                        <td>{{ order.user.username }}</td>
+                                        <td>{{ "%.2f"|format(order.total_amount) }} €</td>
+                                        <td>
+                                            <span class="badge bg-{{ 'success' if order.status == 'completed' else 'warning' if order.status == 'pending' else 'danger' }}">
+                                                {{ order.status|title }}
+                                            </span>
+                                        </td>
+                                        <td>{{ order.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-primary" 
+                                                    onclick="viewOrder({{ order.id }})">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Ajouter/Modifier Produit -->
+<div class="modal fade" id="addProductModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Ajouter un produit</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="product-form">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="product_name" class="form-label">Nom du produit *</label>
+                            <input type="text" class="form-control" id="product_name" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="product_category" class="form-label">Catégorie *</label>
+                            <select class="form-select" id="product_category" required>
+                                <option value="">Sélectionner une catégorie</option>
+                                <option value="Informatique">Informatique</option>
+                                <option value="Mobile">Mobile</option>
+                                <option value="Audio">Audio</option>
+                                <option value="Wearable">Wearable</option>
+                                <option value="Maison">Maison</option>
+                                <option value="Sport">Sport</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="product_description" class="form-label">Description *</label>
+                        <textarea class="form-control" id="product_description" rows="3" required></textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="product_price" class="form-label">Prix (€) *</label>
+                            <input type="number" class="form-control" id="product_price" step="0.01" min="0" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="product_stock" class="form-label">Stock *</label>
+                            <input type="number" class="form-control" id="product_stock" min="0" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="product_image" class="form-label">URL de l'image</label>
+                            <input type="url" class="form-control" id="product_image">
+                        </div>
+                    </div>
+                    
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="product_active" checked>
+                        <label class="form-check-label" for="product_active">
+                            Produit actif
+                        </label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="saveProduct()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let editingProductId = null;
+
+function editProduct(productId) {
+    // Récupérer les données du produit
+    fetch(`/api/products/${productId}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('product_name').value = data.name;
+            document.getElementById('product_category').value = data.category;
+            document.getElementById('product_description').value = data.description;
+            document.getElementById('product_price').value = data.price;
+            document.getElementById('product_stock').value = data.stock;
+            document.getElementById('product_image').value = data.image_url || '';
+            document.getElementById('product_active').checked = data.is_active;
+            
+            editingProductId = productId;
+            
+            // Changer le titre du modal
+            document.querySelector('#addProductModal .modal-title').textContent = 'Modifier le produit';
+            
+            // Afficher le modal
+            new bootstrap.Modal(document.getElementById('addProductModal')).show();
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            alert('Erreur lors du chargement du produit');
+        });
+}
+
+function deleteProduct(productId) {
+    if (confirm('Êtes-vous sûr de vouloir supprimer ce produit ?')) {
+        fetch(`/admin/delete_product/${productId}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erreur: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            alert('Erreur lors de la suppression');
+        });
+    }
+}
+
+function saveProduct() {
+    const formData = {
+        name: document.getElementById('product_name').value,
+        category: document.getElementById('product_category').value,
+        description: document.getElementById('product_description').value,
+        price: document.getElementById('product_price').value,
+        stock: document.getElementById('product_stock').value,
+        image_url: document.getElementById('product_image').value,
+        is_active: document.getElementById('product_active').checked
+    };
+    
+    // Validation
+    if (!formData.name || !formData.category || !formData.description || !formData.price || !formData.stock) {
+        alert('Veuillez remplir tous les champs obligatoires');
+        return;
+    }
+    
+    const url = editingProductId ? `/admin/update_product/${editingProductId}` : '/admin/add_product';
+    const method = editingProductId ? 'POST' : 'POST';
+    
+    fetch(url, {
+        method: method,
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('Erreur lors de la sauvegarde');
+    });
+}
+
+function viewOrder(orderId) {
+    alert('Fonctionnalité de visualisation des commandes à implémenter');
+}
+
+// Réinitialiser le formulaire quand le modal se ferme
+document.getElementById('addProductModal').addEventListener('hidden.bs.modal', function() {
+    document.getElementById('product-form').reset();
+    editingProductId = null;
+    document.querySelector('#addProductModal .modal-title').textContent = 'Ajouter un produit';
+});
+</script>
+{% endblock %}
