@@ -408,6 +408,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user.last_name
     )
     
+    # Recharger les données à chaque fois pour avoir les menus à jour
+    data = load_data()
+    
     # Construire le clavier avec les menus du Service
     keyboard = []
     
@@ -577,7 +580,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Gestion des callbacks normaux
     if query.data == "back_to_main":
-        # Charger les données
+        # Recharger les données à chaque fois pour avoir les menus à jour
         data = load_data()
         
         # Construire le clavier avec les menus du Service
@@ -1645,7 +1648,7 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         admins.discard(user_id)
         context.user_data.clear()
         
-        # Charger les données
+        # Recharger les données à chaque fois pour avoir les menus à jour
         data = load_data()
         
         # Construire le clavier avec les menus du Service
