@@ -246,11 +246,20 @@ async def notify_admin_contact(context, user, message_text):
 async def safe_edit_message(query, text, reply_markup=None, parse_mode=None):
     """Édite un message de manière sécurisée avec gestion d'erreurs"""
     try:
-        await query.edit_message_text(
-            text=text,
-            reply_markup=reply_markup,
-            parse_mode=parse_mode
-        )
+        # Vérifier si le message a du texte à éditer
+        if not query.message.text and not query.message.caption:
+            # Si le message n'a pas de texte, envoyer un nouveau message
+            await query.message.reply_text(
+                text=text,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode
+            )
+        else:
+            await query.edit_message_text(
+                text=text,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode
+            )
     except Exception as e:
         # Si l'édition échoue, envoyer un nouveau message
         try:
@@ -337,12 +346,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     welcome_text = data.get("welcome_text", "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :")
     welcome_photo = data.get("welcome_photo")
-    
-    # Supprimer le message de commande /start aussi
-    try:
-        await update.message.delete()
-    except:
-        pass
     
     # Attendre un peu après la suppression
     await asyncio.sleep(0.5)
