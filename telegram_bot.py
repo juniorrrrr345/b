@@ -540,8 +540,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 keyboard.append([InlineKeyboardButton("💼 Nos Services", callback_data="services")])
             
-            # Ajouter le bouton Nous contacter
-            keyboard.append([InlineKeyboardButton("💬 Nous contacter", callback_data="contact_us")])
             
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
@@ -573,8 +571,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Si pas de menus, garder le bouton Services par défaut
             keyboard.append([InlineKeyboardButton("💼 Nos Services", callback_data="services")])
         
-        # Ajouter le bouton Nous contacter
-        keyboard.append([InlineKeyboardButton("💬 Nous contacter", callback_data="contact_us")])
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
