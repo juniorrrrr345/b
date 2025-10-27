@@ -409,8 +409,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user.last_name
     )
     
-    # Construire le clavier avec les menus du Service
+    # Construire le clavier avec les boutons principaux
     keyboard = []
+    
+    # Ajouter les boutons principaux
+    keyboard.append([InlineKeyboardButton("💼 Nos Services", callback_data="nos_services")])
+    keyboard.append([InlineKeyboardButton("📞 Contact", callback_data="contact")])
+    keyboard.append([InlineKeyboardButton("✉️ Nous Contacter", callback_data="nous_contacter")])
     
     # Ajouter les menus du Service
     services = data.get("services", [])
@@ -576,13 +581,82 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("📋 Aucun menu configuré pour le moment")
         return
     
+    # Gestion des callbacks pour les boutons principaux
+    if query.data == "nos_services":
+        data = load_data()
+        content = data.get("nos_services", "💼 Nos Services :\n1️⃣ Développement Web\n2️⃣ Design\n3️⃣ Marketing Digital")
+        keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="back_to_main")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Vérifier s'il y a une photo pour nos services
+        nos_services_photo = data.get("nos_services_photo")
+        
+        if nos_services_photo:
+            try:
+                await query.edit_message_media(
+                    media=InputMediaPhoto(media=nos_services_photo, caption=content),
+                    reply_markup=reply_markup
+                )
+            except Exception as e:
+                await safe_edit_message(query, f"{content}\n\n🖼️ *Photo disponible*", reply_markup=reply_markup, parse_mode="Markdown")
+        else:
+            await safe_edit_message(query, content, reply_markup=reply_markup)
+        return
+    
+    if query.data == "contact":
+        data = load_data()
+        content = data.get("contact", "📞 Contactez-nous : contact@monentreprise.com\nTéléphone : +33 6 12 34 56 78")
+        keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="back_to_main")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Vérifier s'il y a une photo pour contact
+        contact_photo = data.get("contact_photo")
+        
+        if contact_photo:
+            try:
+                await query.edit_message_media(
+                    media=InputMediaPhoto(media=contact_photo, caption=content),
+                    reply_markup=reply_markup
+                )
+            except Exception as e:
+                await safe_edit_message(query, f"{content}\n\n🖼️ *Photo disponible*", reply_markup=reply_markup, parse_mode="Markdown")
+        else:
+            await safe_edit_message(query, content, reply_markup=reply_markup)
+        return
+    
+    if query.data == "nous_contacter":
+        data = load_data()
+        content = data.get("nous_contacter", "✉️ Nous Contacter :\n\nEnvoyez-nous un message et nous vous répondrons rapidement !")
+        keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="back_to_main")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Vérifier s'il y a une photo pour nous contacter
+        nous_contacter_photo = data.get("nous_contacter_photo")
+        
+        if nous_contacter_photo:
+            try:
+                await query.edit_message_media(
+                    media=InputMediaPhoto(media=nous_contacter_photo, caption=content),
+                    reply_markup=reply_markup
+                )
+            except Exception as e:
+                await safe_edit_message(query, f"{content}\n\n🖼️ *Photo disponible*", reply_markup=reply_markup, parse_mode="Markdown")
+        else:
+            await safe_edit_message(query, content, reply_markup=reply_markup)
+        return
+    
     # Gestion des callbacks normaux
     if query.data == "back_to_main":
         # Charger les données
         data = load_data()
         
-        # Construire le clavier avec les menus du Service
+        # Construire le clavier avec les boutons principaux
         keyboard = []
+        
+        # Ajouter les boutons principaux
+        keyboard.append([InlineKeyboardButton("💼 Nos Services", callback_data="nos_services")])
+        keyboard.append([InlineKeyboardButton("📞 Contact", callback_data="contact")])
+        keyboard.append([InlineKeyboardButton("✉️ Nous Contacter", callback_data="nous_contacter")])
         
         # Ajouter les menus du Service
         services = data.get("services", [])
@@ -592,7 +666,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if services:
             # Ajouter chaque menu comme un bouton séparé
             for i, service in enumerate(services):
-                keyboard.append([InlineKeyboardButton(service, callback_data=f"service_menu_{i}")])
+                if isinstance(service, dict):
+                    service_name = service.get("name", f"Menu {i+1}")
+                else:
+                    service_name = str(service)
+                keyboard.append([InlineKeyboardButton(service_name, callback_data=f"service_menu_{i}")])
         else:
             # Si pas de menus, afficher un message
             keyboard.append([InlineKeyboardButton("📋 Aucun menu disponible", callback_data="no_menus")])
@@ -758,7 +836,7 @@ async def check_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard = [
                 [
                     InlineKeyboardButton("👥 Admin", callback_data="admin_manage_admins"),
-                    InlineKeyboardButton("⚙️ Service", callback_data="admin_service")
+                    InlineKeyboardButton("📋 Menu", callback_data="admin_menu")
                 ],
                 [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
                 [InlineKeyboardButton("📢 Message", callback_data="admin_message_panel")],
@@ -1052,7 +1130,7 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         keyboard = [
             [
                 InlineKeyboardButton("👥 Admin", callback_data="admin_manage_admins"),
-                InlineKeyboardButton("⚙️ Service", callback_data="admin_service")
+                InlineKeyboardButton("📋 Menu", callback_data="admin_menu")
             ],
             [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
             [InlineKeyboardButton("📢 Message", callback_data="admin_message_panel")],
@@ -1061,6 +1139,25 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(query, "⚙️ Panneau Admin :", reply_markup=markup)
     
+    elif query.data == "admin_menu":
+        # Menu principal - Gestion des boutons principaux et des menus
+        keyboard = [
+            [InlineKeyboardButton("💼 Gérer Nos Services", callback_data="admin_manage_nos_services")],
+            [InlineKeyboardButton("📞 Gérer Contact", callback_data="admin_manage_contact")],
+            [InlineKeyboardButton("✉️ Gérer Nous Contacter", callback_data="admin_manage_nous_contacter")],
+            [InlineKeyboardButton("📋 Gérer les Menus", callback_data="admin_service")],
+            [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "📋 **Menu - Gestion des Boutons**\n\n"
+            "Gérez les boutons principaux et les menus qui s'affichent dans la commande /start\n\n"
+            "Choisissez une action :",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+    
     elif query.data == "admin_service":
         # Menu Service - Gestion des menus du /start
         keyboard = [
@@ -1068,7 +1165,7 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             [InlineKeyboardButton("➕ Ajouter un menu", callback_data="admin_add_menu")],
             [InlineKeyboardButton("✏️ Modifier un menu", callback_data="admin_edit_menu")],
             [InlineKeyboardButton("🗑️ Supprimer un menu", callback_data="admin_delete_menu")],
-            [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+            [InlineKeyboardButton("🔙 Retour au menu", callback_data="admin_menu")]
         ]
         markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(
@@ -1076,6 +1173,210 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             "⚙️ **Service - Gestion des Menus**\n\n"
             "Gérez les menus qui s'affichent dans la commande /start\n\n"
             "Choisissez une action :",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+    
+    elif query.data == "admin_manage_nos_services":
+        # Gestion de Nos Services
+        data = load_data()
+        current_text = data.get("nos_services", "💼 Nos Services :\n1️⃣ Développement Web\n2️⃣ Design\n3️⃣ Marketing Digital")
+        current_photo = data.get("nos_services_photo")
+        photo_status = "✅ Photo définie" if current_photo else "❌ Aucune photo"
+        
+        keyboard = [
+            [InlineKeyboardButton("✏️ Modifier le texte", callback_data="admin_edit_nos_services_text")],
+            [InlineKeyboardButton("🖼️ Modifier la photo", callback_data="admin_edit_nos_services_photo")],
+            [InlineKeyboardButton("🗑️ Supprimer la photo", callback_data="admin_delete_nos_services_photo")],
+            [InlineKeyboardButton("🔙 Retour au menu", callback_data="admin_menu")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            f"💼 **Gestion de Nos Services**\n\n"
+            f"*Texte actuel :*\n{current_text}\n\n"
+            f"*Photo :* {photo_status}",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+    
+    elif query.data == "admin_edit_nos_services_text":
+        keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="admin_manage_nos_services")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "✏️ **Modification du texte Nos Services**\n\n"
+            "Envoie le nouveau texte pour *Nos Services* :\n\n"
+            f"*Texte actuel :*\n{data.get('nos_services', 'Aucun texte défini')}",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        context.user_data["editing"] = "nos_services"
+    
+    elif query.data == "admin_edit_nos_services_photo":
+        keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="admin_manage_nos_services")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "🖼️ **Modification de la photo Nos Services**\n\n"
+            "Envoie la nouvelle photo pour *Nos Services* :\n\n"
+            "*Note :* Envoie une image en tant que photo (pas en tant que fichier)",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        context.user_data["editing"] = "nos_services_photo"
+    
+    elif query.data == "admin_delete_nos_services_photo":
+        data["nos_services_photo"] = None
+        save_data(data)
+        keyboard = [
+            [InlineKeyboardButton("✏️ Modifier le texte", callback_data="admin_edit_nos_services_text")],
+            [InlineKeyboardButton("🖼️ Modifier la photo", callback_data="admin_edit_nos_services_photo")],
+            [InlineKeyboardButton("🗑️ Supprimer la photo", callback_data="admin_delete_nos_services_photo")],
+            [InlineKeyboardButton("🔙 Retour au menu", callback_data="admin_menu")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "✅ **Photo Nos Services supprimée !**\n\n"
+            f"*Texte actuel :*\n{data.get('nos_services', 'Aucun texte défini')}\n\n"
+            f"*Photo :* ❌ Aucune photo",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+    
+    elif query.data == "admin_manage_contact":
+        # Gestion de Contact
+        data = load_data()
+        current_text = data.get("contact", "📞 Contactez-nous : contact@monentreprise.com\nTéléphone : +33 6 12 34 56 78")
+        current_photo = data.get("contact_photo")
+        photo_status = "✅ Photo définie" if current_photo else "❌ Aucune photo"
+        
+        keyboard = [
+            [InlineKeyboardButton("✏️ Modifier le texte", callback_data="admin_edit_contact_text")],
+            [InlineKeyboardButton("🖼️ Modifier la photo", callback_data="admin_edit_contact_photo")],
+            [InlineKeyboardButton("🗑️ Supprimer la photo", callback_data="admin_delete_contact_photo")],
+            [InlineKeyboardButton("🔙 Retour au menu", callback_data="admin_menu")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            f"📞 **Gestion de Contact**\n\n"
+            f"*Texte actuel :*\n{current_text}\n\n"
+            f"*Photo :* {photo_status}",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+    
+    elif query.data == "admin_edit_contact_text":
+        keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="admin_manage_contact")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "✏️ **Modification du texte Contact**\n\n"
+            "Envoie le nouveau texte pour *Contact* :\n\n"
+            f"*Texte actuel :*\n{data.get('contact', 'Aucun texte défini')}",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        context.user_data["editing"] = "contact"
+    
+    elif query.data == "admin_edit_contact_photo":
+        keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="admin_manage_contact")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "🖼️ **Modification de la photo Contact**\n\n"
+            "Envoie la nouvelle photo pour *Contact* :\n\n"
+            "*Note :* Envoie une image en tant que photo (pas en tant que fichier)",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        context.user_data["editing"] = "contact_photo"
+    
+    elif query.data == "admin_delete_contact_photo":
+        data["contact_photo"] = None
+        save_data(data)
+        keyboard = [
+            [InlineKeyboardButton("✏️ Modifier le texte", callback_data="admin_edit_contact_text")],
+            [InlineKeyboardButton("🖼️ Modifier la photo", callback_data="admin_edit_contact_photo")],
+            [InlineKeyboardButton("🗑️ Supprimer la photo", callback_data="admin_delete_contact_photo")],
+            [InlineKeyboardButton("🔙 Retour au menu", callback_data="admin_menu")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "✅ **Photo Contact supprimée !**\n\n"
+            f"*Texte actuel :*\n{data.get('contact', 'Aucun texte défini')}\n\n"
+            f"*Photo :* ❌ Aucune photo",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+    
+    elif query.data == "admin_manage_nous_contacter":
+        # Gestion de Nous Contacter
+        data = load_data()
+        current_text = data.get("nous_contacter", "✉️ Nous Contacter :\n\nEnvoyez-nous un message et nous vous répondrons rapidement !")
+        current_photo = data.get("nous_contacter_photo")
+        photo_status = "✅ Photo définie" if current_photo else "❌ Aucune photo"
+        
+        keyboard = [
+            [InlineKeyboardButton("✏️ Modifier le texte", callback_data="admin_edit_nous_contacter_text")],
+            [InlineKeyboardButton("🖼️ Modifier la photo", callback_data="admin_edit_nous_contacter_photo")],
+            [InlineKeyboardButton("🗑️ Supprimer la photo", callback_data="admin_delete_nous_contacter_photo")],
+            [InlineKeyboardButton("🔙 Retour au menu", callback_data="admin_menu")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            f"✉️ **Gestion de Nous Contacter**\n\n"
+            f"*Texte actuel :*\n{current_text}\n\n"
+            f"*Photo :* {photo_status}",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+    
+    elif query.data == "admin_edit_nous_contacter_text":
+        keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="admin_manage_nous_contacter")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "✏️ **Modification du texte Nous Contacter**\n\n"
+            "Envoie le nouveau texte pour *Nous Contacter* :\n\n"
+            f"*Texte actuel :*\n{data.get('nous_contacter', 'Aucun texte défini')}",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        context.user_data["editing"] = "nous_contacter"
+    
+    elif query.data == "admin_edit_nous_contacter_photo":
+        keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="admin_manage_nous_contacter")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "🖼️ **Modification de la photo Nous Contacter**\n\n"
+            "Envoie la nouvelle photo pour *Nous Contacter* :\n\n"
+            "*Note :* Envoie une image en tant que photo (pas en tant que fichier)",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        context.user_data["editing"] = "nous_contacter_photo"
+    
+    elif query.data == "admin_delete_nous_contacter_photo":
+        data["nous_contacter_photo"] = None
+        save_data(data)
+        keyboard = [
+            [InlineKeyboardButton("✏️ Modifier le texte", callback_data="admin_edit_nous_contacter_text")],
+            [InlineKeyboardButton("🖼️ Modifier la photo", callback_data="admin_edit_nous_contacter_photo")],
+            [InlineKeyboardButton("🗑️ Supprimer la photo", callback_data="admin_delete_nous_contacter_photo")],
+            [InlineKeyboardButton("🔙 Retour au menu", callback_data="admin_menu")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "✅ **Photo Nous Contacter supprimée !**\n\n"
+            f"*Texte actuel :*\n{data.get('nous_contacter', 'Aucun texte défini')}\n\n"
+            f"*Photo :* ❌ Aucune photo",
             reply_markup=markup,
             parse_mode="Markdown"
         )
@@ -1665,8 +1966,13 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         # Charger les données
         data = load_data()
         
-        # Construire le clavier avec les menus du Service
+        # Construire le clavier avec les boutons principaux
         keyboard = []
+        
+        # Ajouter les boutons principaux
+        keyboard.append([InlineKeyboardButton("💼 Nos Services", callback_data="nos_services")])
+        keyboard.append([InlineKeyboardButton("📞 Contact", callback_data="contact")])
+        keyboard.append([InlineKeyboardButton("✉️ Nous Contacter", callback_data="nous_contacter")])
         
         # Ajouter les menus du Service
         services = data.get("services", [])
@@ -1720,6 +2026,72 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 markup = InlineKeyboardMarkup(keyboard)
                 await update.message.reply_text(
                     "✅ Photo d'accueil mise à jour !\n\n🖼️ Panel Admin Photo :",
+                    reply_markup=markup
+                )
+            else:
+                await update.message.reply_text("❌ Veuillez envoyer une photo (pas un fichier).")
+        elif section == "nos_services_photo":
+            # Gestion de la photo Nos Services
+            if update.message.photo:
+                photo = update.message.photo[-1]
+                data["nos_services_photo"] = photo.file_id
+                save_data(data)
+                context.user_data["editing"] = None
+                
+                # Retour au panel Nos Services
+                keyboard = [
+                    [InlineKeyboardButton("✏️ Modifier le texte", callback_data="admin_edit_nos_services_text")],
+                    [InlineKeyboardButton("🖼️ Modifier la photo", callback_data="admin_edit_nos_services_photo")],
+                    [InlineKeyboardButton("🗑️ Supprimer la photo", callback_data="admin_delete_nos_services_photo")],
+                    [InlineKeyboardButton("🔙 Retour au menu", callback_data="admin_menu")]
+                ]
+                markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(
+                    "✅ Photo Nos Services mise à jour !\n\n💼 Gestion de Nos Services :",
+                    reply_markup=markup
+                )
+            else:
+                await update.message.reply_text("❌ Veuillez envoyer une photo (pas un fichier).")
+        elif section == "contact_photo":
+            # Gestion de la photo Contact
+            if update.message.photo:
+                photo = update.message.photo[-1]
+                data["contact_photo"] = photo.file_id
+                save_data(data)
+                context.user_data["editing"] = None
+                
+                # Retour au panel Contact
+                keyboard = [
+                    [InlineKeyboardButton("✏️ Modifier le texte", callback_data="admin_edit_contact_text")],
+                    [InlineKeyboardButton("🖼️ Modifier la photo", callback_data="admin_edit_contact_photo")],
+                    [InlineKeyboardButton("🗑️ Supprimer la photo", callback_data="admin_delete_contact_photo")],
+                    [InlineKeyboardButton("🔙 Retour au menu", callback_data="admin_menu")]
+                ]
+                markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(
+                    "✅ Photo Contact mise à jour !\n\n📞 Gestion de Contact :",
+                    reply_markup=markup
+                )
+            else:
+                await update.message.reply_text("❌ Veuillez envoyer une photo (pas un fichier).")
+        elif section == "nous_contacter_photo":
+            # Gestion de la photo Nous Contacter
+            if update.message.photo:
+                photo = update.message.photo[-1]
+                data["nous_contacter_photo"] = photo.file_id
+                save_data(data)
+                context.user_data["editing"] = None
+                
+                # Retour au panel Nous Contacter
+                keyboard = [
+                    [InlineKeyboardButton("✏️ Modifier le texte", callback_data="admin_edit_nous_contacter_text")],
+                    [InlineKeyboardButton("🖼️ Modifier la photo", callback_data="admin_edit_nous_contacter_photo")],
+                    [InlineKeyboardButton("🗑️ Supprimer la photo", callback_data="admin_delete_nous_contacter_photo")],
+                    [InlineKeyboardButton("🔙 Retour au menu", callback_data="admin_menu")]
+                ]
+                markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(
+                    "✅ Photo Nous Contacter mise à jour !\n\n✉️ Gestion de Nous Contacter :",
                     reply_markup=markup
                 )
             else:
@@ -1941,12 +2313,51 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"✅ Texte d'accueil mis à jour !\n\n🖼️ Panel Admin Photo :",
                     reply_markup=markup
                 )
+            elif section == "nos_services":
+                # Retour au panel Nos Services
+                keyboard = [
+                    [InlineKeyboardButton("✏️ Modifier le texte", callback_data="admin_edit_nos_services_text")],
+                    [InlineKeyboardButton("🖼️ Modifier la photo", callback_data="admin_edit_nos_services_photo")],
+                    [InlineKeyboardButton("🗑️ Supprimer la photo", callback_data="admin_delete_nos_services_photo")],
+                    [InlineKeyboardButton("🔙 Retour au menu", callback_data="admin_menu")]
+                ]
+                markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(
+                    f"✅ Texte Nos Services mis à jour !\n\n💼 Gestion de Nos Services :",
+                    reply_markup=markup
+                )
+            elif section == "contact":
+                # Retour au panel Contact
+                keyboard = [
+                    [InlineKeyboardButton("✏️ Modifier le texte", callback_data="admin_edit_contact_text")],
+                    [InlineKeyboardButton("🖼️ Modifier la photo", callback_data="admin_edit_contact_photo")],
+                    [InlineKeyboardButton("🗑️ Supprimer la photo", callback_data="admin_delete_contact_photo")],
+                    [InlineKeyboardButton("🔙 Retour au menu", callback_data="admin_menu")]
+                ]
+                markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(
+                    f"✅ Texte Contact mis à jour !\n\n📞 Gestion de Contact :",
+                    reply_markup=markup
+                )
+            elif section == "nous_contacter":
+                # Retour au panel Nous Contacter
+                keyboard = [
+                    [InlineKeyboardButton("✏️ Modifier le texte", callback_data="admin_edit_nous_contacter_text")],
+                    [InlineKeyboardButton("🖼️ Modifier la photo", callback_data="admin_edit_nous_contacter_photo")],
+                    [InlineKeyboardButton("🗑️ Supprimer la photo", callback_data="admin_delete_nous_contacter_photo")],
+                    [InlineKeyboardButton("🔙 Retour au menu", callback_data="admin_menu")]
+                ]
+                markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(
+                    f"✅ Texte Nous Contacter mis à jour !\n\n✉️ Gestion de Nous Contacter :",
+                    reply_markup=markup
+                )
             else:
                 # Retour au menu admin principal
                 keyboard = [
                     [
                         InlineKeyboardButton("👥 Admin", callback_data="admin_manage_admins"),
-                        InlineKeyboardButton("⚙️ Service", callback_data="admin_service")
+                        InlineKeyboardButton("📋 Menu", callback_data="admin_menu")
                     ],
                     [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
                     [InlineKeyboardButton("📢 Message", callback_data="admin_message_panel")],
@@ -2044,6 +2455,63 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
             "✅ Photo d'accueil mise à jour !\n\n🖼️ Panel Admin Photo :",
+            reply_markup=markup
+        )
+    elif section == "nos_services_photo":
+        # Gestion de la photo Nos Services
+        photo = update.message.photo[-1]
+        data["nos_services_photo"] = photo.file_id
+        save_data(data)
+        context.user_data["editing"] = None
+        
+        # Retour au panel Nos Services
+        keyboard = [
+            [InlineKeyboardButton("✏️ Modifier le texte", callback_data="admin_edit_nos_services_text")],
+            [InlineKeyboardButton("🖼️ Modifier la photo", callback_data="admin_edit_nos_services_photo")],
+            [InlineKeyboardButton("🗑️ Supprimer la photo", callback_data="admin_delete_nos_services_photo")],
+            [InlineKeyboardButton("🔙 Retour au menu", callback_data="admin_menu")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            "✅ Photo Nos Services mise à jour !\n\n💼 Gestion de Nos Services :",
+            reply_markup=markup
+        )
+    elif section == "contact_photo":
+        # Gestion de la photo Contact
+        photo = update.message.photo[-1]
+        data["contact_photo"] = photo.file_id
+        save_data(data)
+        context.user_data["editing"] = None
+        
+        # Retour au panel Contact
+        keyboard = [
+            [InlineKeyboardButton("✏️ Modifier le texte", callback_data="admin_edit_contact_text")],
+            [InlineKeyboardButton("🖼️ Modifier la photo", callback_data="admin_edit_contact_photo")],
+            [InlineKeyboardButton("🗑️ Supprimer la photo", callback_data="admin_delete_contact_photo")],
+            [InlineKeyboardButton("🔙 Retour au menu", callback_data="admin_menu")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            "✅ Photo Contact mise à jour !\n\n📞 Gestion de Contact :",
+            reply_markup=markup
+        )
+    elif section == "nous_contacter_photo":
+        # Gestion de la photo Nous Contacter
+        photo = update.message.photo[-1]
+        data["nous_contacter_photo"] = photo.file_id
+        save_data(data)
+        context.user_data["editing"] = None
+        
+        # Retour au panel Nous Contacter
+        keyboard = [
+            [InlineKeyboardButton("✏️ Modifier le texte", callback_data="admin_edit_nous_contacter_text")],
+            [InlineKeyboardButton("🖼️ Modifier la photo", callback_data="admin_edit_nous_contacter_photo")],
+            [InlineKeyboardButton("🗑️ Supprimer la photo", callback_data="admin_delete_nous_contacter_photo")],
+            [InlineKeyboardButton("🔙 Retour au menu", callback_data="admin_menu")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            "✅ Photo Nous Contacter mise à jour !\n\n✉️ Gestion de Nous Contacter :",
             reply_markup=markup
         )
 

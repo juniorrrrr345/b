@@ -1,6 +1,11 @@
 {
     "contact": "📞 Contactez-nous : contact@monentreprise.com\nTéléphone : +33 6 12 34 56 78",
+    "nos_services": "💼 Nos Services :\n1️⃣ Développement Web\n2️⃣ Design\n3️⃣ Marketing Digital",
+    "nous_contacter": "✉️ Nous Contacter :\n\nEnvoyez-nous un message et nous vous répondrons rapidement !",
     "services": [],
     "welcome_text": "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :",
-    "welcome_photo": null
+    "welcome_photo": null,
+    "contact_photo": null,
+    "nos_services_photo": null,
+    "nous_contacter_photo": null
 }
