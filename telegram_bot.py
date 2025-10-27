@@ -842,6 +842,11 @@ async def check_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     InlineKeyboardButton("👥 Admin", callback_data="admin_manage_admins"),
                     InlineKeyboardButton("📋 Menu", callback_data="admin_menu")
                 ],
+                [
+                    InlineKeyboardButton("💼 Nos Services", callback_data="admin_manage_nos_services"),
+                    InlineKeyboardButton("📞 Contact", callback_data="admin_manage_contact")
+                ],
+                [InlineKeyboardButton("✉️ Nous Contacter", callback_data="admin_manage_nous_contacter")],
                 [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
                 [InlineKeyboardButton("📢 Message", callback_data="admin_message_panel")],
                 [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
@@ -1136,6 +1141,11 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
                 InlineKeyboardButton("👥 Admin", callback_data="admin_manage_admins"),
                 InlineKeyboardButton("📋 Menu", callback_data="admin_menu")
             ],
+            [
+                InlineKeyboardButton("💼 Nos Services", callback_data="admin_manage_nos_services"),
+                InlineKeyboardButton("📞 Contact", callback_data="admin_manage_contact")
+            ],
+            [InlineKeyboardButton("✉️ Nous Contacter", callback_data="admin_manage_nous_contacter")],
             [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
             [InlineKeyboardButton("📢 Message", callback_data="admin_message_panel")],
             [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
@@ -2367,6 +2377,11 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         InlineKeyboardButton("👥 Admin", callback_data="admin_manage_admins"),
                         InlineKeyboardButton("📋 Menu", callback_data="admin_menu")
                     ],
+                    [
+                        InlineKeyboardButton("💼 Nos Services", callback_data="admin_manage_nos_services"),
+                        InlineKeyboardButton("📞 Contact", callback_data="admin_manage_contact")
+                    ],
+                    [InlineKeyboardButton("✉️ Nous Contacter", callback_data="admin_manage_nous_contacter")],
                     [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
                     [InlineKeyboardButton("📢 Message", callback_data="admin_message_panel")],
                     [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
