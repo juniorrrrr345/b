@@ -545,7 +545,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Ajouter les menus du Service
             if services:
                 for i, service in enumerate(services):
-                    keyboard.append([InlineKeyboardButton(service, callback_data=f"service_menu_{i}")])
+                    if isinstance(service, dict):
+                        service_name = service.get("name", f"Menu {i+1}")
+                    else:
+                        service_name = str(service)
+                    keyboard.append([InlineKeyboardButton(service_name, callback_data=f"service_menu_{i}")])
             else:
                 keyboard.append([InlineKeyboardButton("📋 Aucun menu disponible", callback_data="no_menus")])
             
@@ -1472,7 +1476,11 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         # Créer les boutons pour chaque menu
         keyboard = []
         for i, service in enumerate(services):
-            keyboard.append([InlineKeyboardButton(f"🗑️ {service[:30]}...", callback_data=f"admin_delete_menu_{i}")])
+            if isinstance(service, dict):
+                service_name = service.get("name", f"Menu {i+1}")
+            else:
+                service_name = str(service)
+            keyboard.append([InlineKeyboardButton(f"🗑️ {service_name[:30]}...", callback_data=f"admin_delete_menu_{i}")])
         keyboard.append([InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")])
         
         markup = InlineKeyboardMarkup(keyboard)
