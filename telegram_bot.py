@@ -428,8 +428,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Si pas de menus, garder le bouton Services par défaut
         keyboard.append([InlineKeyboardButton("💼 Nos Services", callback_data="services")])
     
-    # Ajouter le bouton Nous contacter
-    keyboard.append([InlineKeyboardButton("💬 Nous contacter", callback_data="contact_us")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     welcome_text = data.get("welcome_text", "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :")
@@ -813,10 +811,6 @@ async def check_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [
                     InlineKeyboardButton("👥 Admin", callback_data="admin_manage_admins"),
                     InlineKeyboardButton("⚙️ Service", callback_data="admin_service")
-                ],
-                [
-                    InlineKeyboardButton("✏️ Modifier Contact", callback_data="admin_edit_contact"),
-                    InlineKeyboardButton("✏️ Modifier Services", callback_data="admin_edit_services")
                 ],
                 [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
                 [InlineKeyboardButton("📢 Message", callback_data="admin_message_panel")],
