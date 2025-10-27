@@ -542,11 +542,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Ajouter les menus du Service
             if services:
                 for i, service in enumerate(services):
-                    keyboard.append([InlineKeyboardButton(service, callback_data=f"service_menu_{i}")])
+                    if isinstance(service, dict):
+                        service_name = service.get("name", f"Menu {i+1}")
+                    else:
+                        service_name = str(service)
+                    keyboard.append([InlineKeyboardButton(service_name, callback_data=f"service_menu_{i}")])
             else:
                 keyboard.append([InlineKeyboardButton("📋 Aucun menu disponible", callback_data="no_menus")])
             
-            
+            keyboard.append([InlineKeyboardButton("🔙 Retour au menu principal", callback_data="back_to_main")])
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             if menu_photo:
@@ -594,7 +598,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if services:
             # Ajouter chaque menu comme un bouton séparé
             for i, service in enumerate(services):
-                keyboard.append([InlineKeyboardButton(service, callback_data=f"service_menu_{i}")])
+                if isinstance(service, dict):
+                    service_name = service.get("name", f"Menu {i+1}")
+                else:
+                    service_name = str(service)
+                keyboard.append([InlineKeyboardButton(service_name, callback_data=f"service_menu_{i}")])
         else:
             # Si pas de menus, afficher un message
             keyboard.append([InlineKeyboardButton("📋 Aucun menu disponible", callback_data="no_menus")])
