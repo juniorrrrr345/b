@@ -1269,6 +1269,9 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             data["services"] = services
             save_data(data)
             
+            # Recharger les données pour s'assurer de la cohérence
+            data = load_data()
+            
             keyboard = [[InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")]]
             markup = InlineKeyboardMarkup(keyboard)
             await safe_edit_message(
@@ -1735,6 +1738,9 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_data(data)
             context.user_data["editing"] = None
             
+            # Recharger les données pour s'assurer de la cohérence
+            data = load_data()
+            
             # Retour au menu Service
             keyboard = [
                 [InlineKeyboardButton("📋 Voir les menus actuels", callback_data="admin_view_menus")],
@@ -1776,6 +1782,9 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 save_data(data)
                 context.user_data["editing"] = None
                 context.user_data["editing_menu_index"] = None
+                
+                # Recharger les données pour s'assurer de la cohérence
+                data = load_data()
                 
                 # Retour au menu Service
                 keyboard = [
