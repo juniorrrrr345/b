@@ -409,15 +409,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user.last_name
     )
     
-    keyboard = [
-        [
-            InlineKeyboardButton("📞 Contact", callback_data="contact"),
-            InlineKeyboardButton("💼 Nos Services", callback_data="services"),
-        ],
-        [
-            InlineKeyboardButton("💬 Nous contacter", callback_data="contact_us"),
-        ]
-    ]
+    # Construire le clavier avec les menus du Service
+    keyboard = []
+    
+    # Ajouter le bouton Contact
+    keyboard.append([InlineKeyboardButton("📞 Contact", callback_data="contact")])
+    
+    # Ajouter les menus du Service
+    services = data.get("services", [])
+    if isinstance(services, str):
+        services = []
+    
+    if services:
+        # Ajouter chaque menu comme un bouton séparé
+        for i, service in enumerate(services):
+            keyboard.append([InlineKeyboardButton(service, callback_data=f"service_menu_{i}")])
+    else:
+        # Si pas de menus, garder le bouton Services par défaut
+        keyboard.append([InlineKeyboardButton("💼 Nos Services", callback_data="services")])
+    
+    # Ajouter le bouton Nous contacter
+    keyboard.append([InlineKeyboardButton("💬 Nous contacter", callback_data="contact_us")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     welcome_text = data.get("welcome_text", "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :")
@@ -499,17 +511,71 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_admin_callback(query, context)
         return
     
+    # Gestion des callbacks des menus du Service
+    if query.data.startswith("service_menu_"):
+        # Gérer les menus du Service
+        menu_index = int(query.data.split("_")[-1])
+        data = load_data()
+        services = data.get("services", [])
+        
+        # Si services est une chaîne, la convertir en liste
+        if isinstance(services, str):
+            services = []
+        
+        if 0 <= menu_index < len(services):
+            # Afficher le contenu du menu sélectionné
+            menu_content = services[menu_index]
+            
+            # Créer le clavier de retour
+            keyboard = []
+            
+            # Ajouter le bouton Contact
+            keyboard.append([InlineKeyboardButton("📞 Contact", callback_data="contact")])
+            
+            # Ajouter les menus du Service
+            if services:
+                for i, service in enumerate(services):
+                    keyboard.append([InlineKeyboardButton(service, callback_data=f"service_menu_{i}")])
+            else:
+                keyboard.append([InlineKeyboardButton("💼 Nos Services", callback_data="services")])
+            
+            # Ajouter le bouton Nous contacter
+            keyboard.append([InlineKeyboardButton("💬 Nous contacter", callback_data="contact_us")])
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                text=menu_content,
+                reply_markup=reply_markup
+            )
+        else:
+            await query.answer("❌ Menu introuvable")
+        return
+    
     # Gestion des callbacks normaux
     if query.data == "back_to_main":
-        keyboard = [
-            [
-                InlineKeyboardButton("📞 Contact", callback_data="contact"),
-                InlineKeyboardButton("💼 Nos Services", callback_data="services"),
-            ],
-            [
-                InlineKeyboardButton("💬 Nous contacter", callback_data="contact_us"),
-            ]
-        ]
+        # Construire le clavier avec les menus du Service
+        keyboard = []
+        
+        # Ajouter le bouton Contact
+        keyboard.append([InlineKeyboardButton("📞 Contact", callback_data="contact")])
+        
+        # Ajouter les menus du Service
+        data = load_data()
+        services = data.get("services", [])
+        if isinstance(services, str):
+            services = []
+        
+        if services:
+            # Ajouter chaque menu comme un bouton séparé
+            for i, service in enumerate(services):
+                keyboard.append([InlineKeyboardButton(service, callback_data=f"service_menu_{i}")])
+        else:
+            # Si pas de menus, garder le bouton Services par défaut
+            keyboard.append([InlineKeyboardButton("💼 Nos Services", callback_data="services")])
+        
+        # Ajouter le bouton Nous contacter
+        keyboard.append([InlineKeyboardButton("💬 Nous contacter", callback_data="contact_us")])
+        
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         welcome_text = data.get("welcome_text", "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :")
@@ -1678,6 +1744,13 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
             ]
             markup = InlineKeyboardMarkup(keyboard)
+            
+            # Supprimer le message de l'utilisateur et envoyer la réponse
+            try:
+                await update.message.delete()
+            except:
+                pass
+            
             await update.message.reply_text(
                 f"✅ **Menu ajouté !**\n\n"
                 f"Le menu '{new_menu}' a été ajouté avec succès !\n\n"
@@ -1713,6 +1786,13 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
                 ]
                 markup = InlineKeyboardMarkup(keyboard)
+                
+                # Supprimer le message de l'utilisateur et envoyer la réponse
+                try:
+                    await update.message.delete()
+                except:
+                    pass
+                
                 await update.message.reply_text(
                     f"✅ **Menu modifié !**\n\n"
                     f"Ancien : {old_menu}\n"
