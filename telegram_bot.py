@@ -546,6 +546,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         service_name = service.get("name", f"Menu {i+1}")
                     else:
                         service_name = str(service)
+                    
+                    # S'assurer que le nom est une chaîne valide
+                    if not service_name or not isinstance(service_name, str):
+                        service_name = f"Menu {i+1}"
+                    
                     keyboard.append([InlineKeyboardButton(service_name, callback_data=f"service_menu_{i}")])
             else:
                 keyboard.append([InlineKeyboardButton("📋 Aucun menu disponible", callback_data="no_menus")])
