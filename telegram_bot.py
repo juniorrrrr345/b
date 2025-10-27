@@ -100,11 +100,21 @@ async def clear_all_bot_messages(context):
             chat_id = user["user_id"]
             print(f"DEBUG: Traitement de l'utilisateur {chat_id}")
             
-            # Supprimer les messages du bot dans ce chat spécifique
+            # Essayer de supprimer les messages récents du bot
             try:
-                deleted_in_chat = await force_delete_all_bot_messages(context, chat_id)
-                deleted_count += deleted_in_chat
-                print(f"DEBUG: {deleted_in_chat} messages supprimés pour l'utilisateur {chat_id}")
+                # Essayer de supprimer les messages récents (IDs élevés = plus récents)
+                # On commence par les IDs élevés et on descend, mais de manière plus ciblée
+                for message_id in range(200, 0, -1):  # De 200 à 1 (plus ciblé)
+                    try:
+                        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+                        deleted_count += 1
+                        print(f"DEBUG: Message {message_id} supprimé pour l'utilisateur {chat_id}")
+                        await asyncio.sleep(0.02)  # Petite pause pour éviter le rate limit
+                    except:
+                        # Message n'existe pas ou ne peut pas être supprimé, continuer
+                        continue
+                        
+                print(f"DEBUG: Suppression terminée pour l'utilisateur {chat_id}")
             except Exception as e:
                 print(f"DEBUG: Erreur suppression messages pour {chat_id}: {e}")
                 continue
@@ -242,15 +252,22 @@ async def force_delete_all_bot_messages(context, chat_id):
     try:
         print(f"DEBUG: force_delete_all_bot_messages pour chat_id {chat_id}")
         
-        # Première passe : supprimer les messages récents
+        # Utiliser get_updates pour récupérer les messages
         message_ids = []
         try:
-            async for message in context.bot.get_chat_history(chat_id, limit=200):
-                if message.from_user and message.from_user.id == context.bot.id:
-                    message_ids.append(message.message_id)
+            # Récupérer les updates récents
+            updates = await context.bot.get_updates(limit=100, timeout=10)
+            print(f"DEBUG: Récupéré {len(updates)} updates")
+            
+            for update in updates:
+                if update.message and update.message.chat_id == chat_id:
+                    if update.message.from_user and update.message.from_user.id == context.bot.id:
+                        message_ids.append(update.message.message_id)
+                        print(f"DEBUG: Message du bot trouvé: {update.message.message_id}")
+            
             print(f"DEBUG: Première passe - trouvé {len(message_ids)} messages du bot")
         except Exception as e:
-            print(f"DEBUG: Erreur get_chat_history dans force_delete_all_bot_messages: {e}")
+            print(f"DEBUG: Erreur get_updates dans force_delete_all_bot_messages: {e}")
             return 0
         
         # Supprimer du plus récent au plus ancien
@@ -258,22 +275,29 @@ async def force_delete_all_bot_messages(context, chat_id):
             try:
                 await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
                 deleted_count += 1
-                print(f"DEBUG: Message {message_id} supprimé (première passe)")
-                await asyncio.sleep(0.01)
+                print(f"DEBUG: Message {message_id} supprimé")
+                await asyncio.sleep(0.1)
             except Exception as e:
                 print(f"DEBUG: Erreur suppression message {message_id}: {e}")
                 continue
                 
-        # Deuxième passe : essayer de supprimer plus de messages
-        await asyncio.sleep(0.5)
+        # Deuxième passe : essayer de récupérer plus d'updates
+        await asyncio.sleep(1)
         message_ids = []
         try:
-            async for message in context.bot.get_chat_history(chat_id, limit=500):
-                if message.from_user and message.from_user.id == context.bot.id:
-                    message_ids.append(message.message_id)
+            # Récupérer plus d'updates avec un offset
+            updates = await context.bot.get_updates(limit=200, timeout=10)
+            print(f"DEBUG: Deuxième passe - récupéré {len(updates)} updates")
+            
+            for update in updates:
+                if update.message and update.message.chat_id == chat_id:
+                    if update.message.from_user and update.message.from_user.id == context.bot.id:
+                        message_ids.append(update.message.message_id)
+                        print(f"DEBUG: Message du bot trouvé (2ème passe): {update.message.message_id}")
+            
             print(f"DEBUG: Deuxième passe - trouvé {len(message_ids)} messages du bot")
         except Exception as e:
-            print(f"DEBUG: Erreur get_chat_history deuxième passe: {e}")
+            print(f"DEBUG: Erreur get_updates deuxième passe: {e}")
             return deleted_count
         
         for message_id in reversed(message_ids):
@@ -281,31 +305,9 @@ async def force_delete_all_bot_messages(context, chat_id):
                 await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
                 deleted_count += 1
                 print(f"DEBUG: Message {message_id} supprimé (deuxième passe)")
-                await asyncio.sleep(0.005)
+                await asyncio.sleep(0.1)
             except Exception as e:
                 print(f"DEBUG: Erreur suppression message {message_id} (deuxième passe): {e}")
-                continue
-                
-        # Troisième passe : dernière tentative
-        await asyncio.sleep(0.5)
-        message_ids = []
-        try:
-            async for message in context.bot.get_chat_history(chat_id, limit=1000):
-                if message.from_user and message.from_user.id == context.bot.id:
-                    message_ids.append(message.message_id)
-            print(f"DEBUG: Troisième passe - trouvé {len(message_ids)} messages du bot")
-        except Exception as e:
-            print(f"DEBUG: Erreur get_chat_history troisième passe: {e}")
-            return deleted_count
-        
-        for message_id in reversed(message_ids):
-            try:
-                await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-                deleted_count += 1
-                print(f"DEBUG: Message {message_id} supprimé (troisième passe)")
-                await asyncio.sleep(0.002)
-            except Exception as e:
-                print(f"DEBUG: Erreur suppression message {message_id} (troisième passe): {e}")
                 continue
                 
         print(f"DEBUG: force_delete_all_bot_messages terminé - {deleted_count} messages supprimés")
