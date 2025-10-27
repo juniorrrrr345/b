@@ -244,22 +244,28 @@ async def update_message_display(query, context):
         keyboard.append([InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")])
         markup = InlineKeyboardMarkup(keyboard)
         
-        await safe_edit_message(
-            query,
-            message_text,
-            reply_markup=markup,
-            parse_mode="Markdown"
-        )
+        try:
+            await query.edit_message_text(
+                text=message_text,
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            print(f"Erreur lors de l'édition du message: {e}")
+            await query.answer("Erreur lors de la mise à jour")
     else:
         # Aucun message
         keyboard = [[InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")]]
         markup = InlineKeyboardMarkup(keyboard)
-        await safe_edit_message(
-            query,
-            "📊 **Messages reçus**\n\nAucun message reçu pour le moment.",
-            reply_markup=markup,
-            parse_mode="Markdown"
-        )
+        try:
+            await query.edit_message_text(
+                text="📊 **Messages reçus**\n\nAucun message reçu pour le moment.",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            print(f"Erreur lors de l'édition du message: {e}")
+            await query.answer("Erreur lors de la mise à jour")
 
 # --- Fonction pour forcer la suppression de tous les messages du bot ---
 async def force_delete_all_bot_messages(context, chat_id):
