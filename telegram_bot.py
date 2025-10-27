@@ -412,9 +412,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Construire le clavier avec les menus du Service
     keyboard = []
     
-    # Ajouter le bouton Contact
-    keyboard.append([InlineKeyboardButton("📞 Contact", callback_data="contact")])
-    
     # Ajouter les menus du Service
     services = data.get("services", [])
     if isinstance(services, str):
@@ -425,8 +422,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for i, service in enumerate(services):
             keyboard.append([InlineKeyboardButton(service, callback_data=f"service_menu_{i}")])
     else:
-        # Si pas de menus, garder le bouton Services par défaut
-        keyboard.append([InlineKeyboardButton("💼 Nos Services", callback_data="services")])
+        # Si pas de menus, afficher un message
+        keyboard.append([InlineKeyboardButton("📋 Aucun menu disponible", callback_data="no_menus")])
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -530,15 +527,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Créer le clavier de retour
             keyboard = []
             
-            # Ajouter le bouton Contact
-            keyboard.append([InlineKeyboardButton("📞 Contact", callback_data="contact")])
-            
             # Ajouter les menus du Service
             if services:
                 for i, service in enumerate(services):
                     keyboard.append([InlineKeyboardButton(service, callback_data=f"service_menu_{i}")])
             else:
-                keyboard.append([InlineKeyboardButton("💼 Nos Services", callback_data="services")])
+                keyboard.append([InlineKeyboardButton("📋 Aucun menu disponible", callback_data="no_menus")])
             
             
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -550,13 +544,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("❌ Menu introuvable")
         return
     
+    # Gestion du callback "no_menus"
+    if query.data == "no_menus":
+        await query.answer("📋 Aucun menu configuré pour le moment")
+        return
+    
     # Gestion des callbacks normaux
     if query.data == "back_to_main":
         # Construire le clavier avec les menus du Service
         keyboard = []
-        
-        # Ajouter le bouton Contact
-        keyboard.append([InlineKeyboardButton("📞 Contact", callback_data="contact")])
         
         # Ajouter les menus du Service
         services = data.get("services", [])
@@ -568,8 +564,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for i, service in enumerate(services):
                 keyboard.append([InlineKeyboardButton(service, callback_data=f"service_menu_{i}")])
         else:
-            # Si pas de menus, garder le bouton Services par défaut
-            keyboard.append([InlineKeyboardButton("💼 Nos Services", callback_data="services")])
+            # Si pas de menus, afficher un message
+            keyboard.append([InlineKeyboardButton("📋 Aucun menu disponible", callback_data="no_menus")])
         
         
         reply_markup = InlineKeyboardMarkup(keyboard)
