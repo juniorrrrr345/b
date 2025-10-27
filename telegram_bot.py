@@ -1073,6 +1073,10 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         data = load_data()
         services = data.get("services", [])
         
+        # Si services est une chaîne, la convertir en liste
+        if isinstance(services, str):
+            services = []
+        
         if not services:
             message_text = "📋 **Menus actuels**\n\n❌ Aucun menu configuré"
         else:
@@ -1102,6 +1106,10 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         data = load_data()
         services = data.get("services", [])
         
+        # Si services est une chaîne, la convertir en liste
+        if isinstance(services, str):
+            services = []
+        
         if not services:
             keyboard = [[InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")]]
             markup = InlineKeyboardMarkup(keyboard)
@@ -1127,6 +1135,10 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         # Supprimer un menu
         data = load_data()
         services = data.get("services", [])
+        
+        # Si services est une chaîne, la convertir en liste
+        if isinstance(services, str):
+            services = []
         
         if not services:
             keyboard = [[InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")]]
@@ -1155,6 +1167,10 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         data = load_data()
         services = data.get("services", [])
         
+        # Si services est une chaîne, la convertir en liste
+        if isinstance(services, str):
+            services = []
+        
         if 0 <= menu_index < len(services):
             context.user_data["editing_menu_index"] = menu_index
             keyboard = [[InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")]]
@@ -1176,6 +1192,10 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         menu_index = int(query.data.split("_")[-1])
         data = load_data()
         services = data.get("services", [])
+        
+        # Si services est une chaîne, la convertir en liste
+        if isinstance(services, str):
+            services = []
         
         if 0 <= menu_index < len(services):
             # Supprimer le menu
@@ -1642,6 +1662,9 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
             data = load_data()
             if "services" not in data:
                 data["services"] = []
+            # Si services est une chaîne, la convertir en liste
+            if isinstance(data["services"], str):
+                data["services"] = []
             data["services"].append(new_menu)
             save_data(data)
             context.user_data["editing"] = None
@@ -1668,6 +1691,10 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
             menu_index = context.user_data.get("editing_menu_index")
             data = load_data()
             services = data.get("services", [])
+            
+            # Si services est une chaîne, la convertir en liste
+            if isinstance(services, str):
+                services = []
             
             if 0 <= menu_index < len(services):
                 old_menu = services[menu_index]
