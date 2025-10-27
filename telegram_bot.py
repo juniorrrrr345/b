@@ -87,47 +87,6 @@ def add_message(user_id, username, first_name, last_name, message_text, timestam
     save_users(users_data)
 
 
-async def clear_all_bot_messages(context):
-    """Supprime tous les messages du bot avec tous les utilisateurs"""
-    users_data = load_users()
-    users = users_data["users"]
-    deleted_count = 0
-    
-    for user in users:
-        try:
-            chat_id = user["user_id"]
-            
-            # Essayer de supprimer les messages récents
-            # Note: L'API Telegram limite la suppression aux messages des 48 dernières heures
-            try:
-                # Récupérer les messages récents (limité à 200 pour supprimer plus de messages)
-                message_ids = []
-                async for message in context.bot.iter_history(chat_id, limit=200):
-                    if message.from_user and message.from_user.id == context.bot.id:
-                        # Supprimer TOUS les messages du bot
-                        message_ids.append(message.message_id)
-                
-                # Supprimer les messages par lots pour éviter les limites de rate
-                # Supprimer du plus récent au plus ancien pour éviter les conflits
-                for message_id in reversed(message_ids):
-                    try:
-                        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-                        deleted_count += 1
-                        # Petite pause pour éviter les limites de rate
-                        await asyncio.sleep(0.02)
-                    except Exception as e:
-                        # Ignorer les erreurs de suppression (message trop ancien, etc.)
-                        continue
-                        
-            except Exception as e:
-                # Si on ne peut pas accéder à l'historique, continuer
-                continue
-                    
-        except Exception as e:
-            print(f"Erreur lors de la suppression des messages pour {user['user_id']}: {e}")
-            continue
-    
-    return deleted_count
 
 
 data = load_data()
@@ -173,120 +132,151 @@ def is_admin_or_higher(user_id):
 
 async def update_message_display(query, context):
     """Mettre à jour l'affichage des messages avec les sélections"""
-    users_data = load_users()
-    messages = users_data.get("messages", [])
-    recent_messages = messages[-10:]
-    selected_messages = context.user_data.get("selected_messages", [])
-    
-    if recent_messages:
-        message_text = "📊 **Messages reçus (10 derniers)**\n\n"
-        for i, msg in enumerate(recent_messages, 1):
-            name = f"{msg['first_name']} {msg['last_name']}".strip()
-            username = f"@{msg['username']}" if msg['username'] else "Sans @username"
+    try:
+        users_data = load_users()
+        messages = users_data.get("messages", [])
+        recent_messages = messages[-10:]
+        selected_messages = context.user_data.get("selected_messages", [])
+        
+        print(f"DEBUG: selected_messages = {selected_messages}")
+        print(f"DEBUG: recent_messages count = {len(recent_messages)}")
+        
+        if recent_messages:
+            message_text = "📊 **Messages reçus (10 derniers)**\n\n"
+            for i, msg in enumerate(recent_messages, 1):
+                name = f"{msg['first_name']} {msg['last_name']}".strip()
+                username = f"@{msg['username']}" if msg['username'] else "Sans @username"
+                
+                # Indicateur de sélection
+                selection_indicator = "✅" if (i-1) in selected_messages else "☐"
+                
+                message_text += f"{selection_indicator} **{i}.** Message envoyé par {name} [{msg['user_id']}]\n"
+                message_text += f"#{msg['user_id']}\n"
+                message_text += f"• {username}\n"
+                message_text += f"Message: {msg['message'][:100]}{'...' if len(msg['message']) > 100 else ''}\n\n"
             
-            # Indicateur de sélection
-            selection_indicator = "✅" if (i-1) in selected_messages else "☐"
+            # Créer des boutons pour chaque message
+            keyboard = []
+            for i, msg in enumerate(recent_messages, 1):
+                name = f"{msg['first_name']} {msg['last_name']}".strip()
+                # Bouton de sélection + bouton profil
+                selection_text = "❌ Désélectionner" if (i-1) in selected_messages else f"☑️ Sélectionner {i}"
+                keyboard.append([
+                    InlineKeyboardButton(selection_text, callback_data=f"select_msg_{i}"),
+                    InlineKeyboardButton(f"👤 Profil {name}", url=f"tg://user?id={msg['user_id']}")
+                ])
             
-            message_text += f"{selection_indicator} **{i}.** Message envoyé par {name} [{msg['user_id']}]\n"
-            message_text += f"#{msg['user_id']}\n"
-            message_text += f"• {username}\n"
-            message_text += f"Message: {msg['message'][:100]}{'...' if len(msg['message']) > 100 else ''}\n\n"
-        
-        # Créer des boutons pour chaque message
-        keyboard = []
-        for i, msg in enumerate(recent_messages, 1):
-            name = f"{msg['first_name']} {msg['last_name']}".strip()
-            # Bouton de sélection + bouton profil
-            selection_text = "❌ Désélectionner" if (i-1) in selected_messages else f"☑️ Sélectionner {i}"
-            keyboard.append([
-                InlineKeyboardButton(selection_text, callback_data=f"select_msg_{i}"),
-                InlineKeyboardButton(f"👤 Profil {name}", url=f"tg://user?id={msg['user_id']}")
-            ])
-        
-        # Boutons d'action
-        action_buttons = []
-        if selected_messages:
-            action_buttons.append(InlineKeyboardButton(f"🗑️ Supprimer ({len(selected_messages)})", callback_data="delete_selected_messages"))
-        
-        if len(selected_messages) < len(recent_messages):
-            action_buttons.append(InlineKeyboardButton("✅ Tout sélectionner", callback_data="select_all_messages"))
-        
-        if action_buttons:
-            keyboard.append(action_buttons)
-        
-        keyboard.append([InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")])
-        markup = InlineKeyboardMarkup(keyboard)
-        
-        try:
-            await query.edit_message_text(
-                text=message_text,
-                reply_markup=markup,
-                parse_mode="Markdown"
-            )
-        except Exception as e:
-            print(f"Erreur lors de l'édition du message: {e}")
-            await query.answer("Erreur lors de la mise à jour")
-    else:
-        # Aucun message
-        keyboard = [[InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")]]
-        markup = InlineKeyboardMarkup(keyboard)
-        try:
-            await query.edit_message_text(
-                text="📊 **Messages reçus**\n\nAucun message reçu pour le moment.",
-                reply_markup=markup,
-                parse_mode="Markdown"
-            )
-        except Exception as e:
-            print(f"Erreur lors de l'édition du message: {e}")
-            await query.answer("Erreur lors de la mise à jour")
+            # Boutons d'action
+            action_buttons = []
+            if selected_messages:
+                action_buttons.append(InlineKeyboardButton(f"🗑️ Supprimer ({len(selected_messages)})", callback_data="delete_selected_messages"))
+            
+            if len(selected_messages) < len(recent_messages):
+                action_buttons.append(InlineKeyboardButton("✅ Tout sélectionner", callback_data="select_all_messages"))
+            
+            if action_buttons:
+                keyboard.append(action_buttons)
+            
+            keyboard.append([InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")])
+            markup = InlineKeyboardMarkup(keyboard)
+            
+            try:
+                await query.edit_message_text(
+                    text=message_text,
+                    reply_markup=markup,
+                    parse_mode="Markdown"
+                )
+                print("DEBUG: Message édité avec succès")
+            except Exception as e:
+                print(f"Erreur lors de l'édition du message: {e}")
+                await query.answer("Erreur lors de la mise à jour")
+        else:
+            # Aucun message
+            keyboard = [[InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            try:
+                await query.edit_message_text(
+                    text="📊 **Messages reçus**\n\nAucun message reçu pour le moment.",
+                    reply_markup=markup,
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                print(f"Erreur lors de l'édition du message: {e}")
+                await query.answer("Erreur lors de la mise à jour")
+    except Exception as e:
+        print(f"Erreur dans update_message_display: {e}")
+        await query.answer("Erreur lors de la mise à jour de l'affichage")
 
 # --- Fonction pour forcer la suppression de tous les messages du bot ---
 async def force_delete_all_bot_messages(context, chat_id):
     """Force la suppression de tous les messages du bot dans un chat"""
+    deleted_count = 0
     try:
-        # Première passe : supprimer les messages récents
+        print(f"DEBUG: force_delete_all_bot_messages pour chat_id {chat_id}")
+        
+        # Utiliser get_updates pour récupérer les messages
         message_ids = []
-        async for message in context.bot.iter_history(chat_id, limit=200):
-            if message.from_user and message.from_user.id == context.bot.id:
-                message_ids.append(message.message_id)
+        try:
+            # Récupérer les updates récents
+            updates = await context.bot.get_updates(limit=100, timeout=10)
+            print(f"DEBUG: Récupéré {len(updates)} updates")
+            
+            for update in updates:
+                if update.message and update.message.chat_id == chat_id:
+                    if update.message.from_user and update.message.from_user.id == context.bot.id:
+                        message_ids.append(update.message.message_id)
+                        print(f"DEBUG: Message du bot trouvé: {update.message.message_id}")
+            
+            print(f"DEBUG: Première passe - trouvé {len(message_ids)} messages du bot")
+        except Exception as e:
+            print(f"DEBUG: Erreur get_updates dans force_delete_all_bot_messages: {e}")
+            return 0
         
         # Supprimer du plus récent au plus ancien
         for message_id in reversed(message_ids):
             try:
                 await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-                await asyncio.sleep(0.01)
-            except:
+                deleted_count += 1
+                print(f"DEBUG: Message {message_id} supprimé")
+                await asyncio.sleep(0.1)
+            except Exception as e:
+                print(f"DEBUG: Erreur suppression message {message_id}: {e}")
                 continue
                 
-        # Deuxième passe : essayer de supprimer plus de messages
-        await asyncio.sleep(0.5)
+        # Deuxième passe : essayer de récupérer plus d'updates
+        await asyncio.sleep(1)
         message_ids = []
-        async for message in context.bot.iter_history(chat_id, limit=500):
-            if message.from_user and message.from_user.id == context.bot.id:
-                message_ids.append(message.message_id)
+        try:
+            # Récupérer plus d'updates avec un offset
+            updates = await context.bot.get_updates(limit=200, timeout=10)
+            print(f"DEBUG: Deuxième passe - récupéré {len(updates)} updates")
+            
+            for update in updates:
+                if update.message and update.message.chat_id == chat_id:
+                    if update.message.from_user and update.message.from_user.id == context.bot.id:
+                        message_ids.append(update.message.message_id)
+                        print(f"DEBUG: Message du bot trouvé (2ème passe): {update.message.message_id}")
+            
+            print(f"DEBUG: Deuxième passe - trouvé {len(message_ids)} messages du bot")
+        except Exception as e:
+            print(f"DEBUG: Erreur get_updates deuxième passe: {e}")
+            return deleted_count
         
         for message_id in reversed(message_ids):
             try:
                 await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-                await asyncio.sleep(0.005)
-            except:
+                deleted_count += 1
+                print(f"DEBUG: Message {message_id} supprimé (deuxième passe)")
+                await asyncio.sleep(0.1)
+            except Exception as e:
+                print(f"DEBUG: Erreur suppression message {message_id} (deuxième passe): {e}")
                 continue
                 
-        # Troisième passe : dernière tentative
-        await asyncio.sleep(0.5)
-        message_ids = []
-        async for message in context.bot.iter_history(chat_id, limit=1000):
-            if message.from_user and message.from_user.id == context.bot.id:
-                message_ids.append(message.message_id)
-        
-        for message_id in reversed(message_ids):
-            try:
-                await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-                await asyncio.sleep(0.002)
-            except:
-                continue
-    except:
-        pass
+        print(f"DEBUG: force_delete_all_bot_messages terminé - {deleted_count} messages supprimés")
+        return deleted_count
+    except Exception as e:
+        print(f"DEBUG: Erreur générale dans force_delete_all_bot_messages: {e}")
+        return deleted_count
 
 # --- Fonction pour notifier l'admin des messages de contact ---
 async def notify_admin_contact(context, user, message_text, timestamp=None):
@@ -419,46 +409,86 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user.last_name
     )
     
-    # Supprimer tous les anciens messages du bot dans cette conversation
-    await force_delete_all_bot_messages(context, user.id)
+    # Construire le clavier avec les menus du Service
+    keyboard = []
     
-    # Attendre un peu pour s'assurer que la suppression est terminée
-    await asyncio.sleep(0.5)
+    # Ajouter les menus du Service
+    services = data.get("services", [])
+    if isinstance(services, str):
+        services = []
     
-    keyboard = [
-        [
-            InlineKeyboardButton("📞 Contact", callback_data="contact"),
-            InlineKeyboardButton("💼 Nos Services", callback_data="services"),
-        ],
-        [
-            InlineKeyboardButton("💬 Nous contacter", callback_data="contact_us"),
-        ]
-    ]
+    if services:
+        # Ajouter chaque menu comme un bouton séparé
+        for i, service in enumerate(services):
+            if isinstance(service, dict):
+                service_name = service.get("name", f"Menu {i+1}")
+            else:
+                service_name = str(service)
+            keyboard.append([InlineKeyboardButton(service_name, callback_data=f"service_menu_{i}")])
+    else:
+        # Si pas de menus, afficher un message
+        keyboard.append([InlineKeyboardButton("📋 Aucun menu disponible", callback_data="no_menus")])
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     welcome_text = data.get("welcome_text", "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :")
     welcome_photo = data.get("welcome_photo")
     
-    # Envoyer le menu principal
+    # Vérifier s'il y a déjà un message principal à éditer
+    main_message_id = context.user_data.get("main_message_id")
+    
+    if main_message_id:
+        # Essayer d'éditer le message existant
+        try:
+            if welcome_photo:
+                await context.bot.edit_message_media(
+                    chat_id=user.id,
+                    message_id=main_message_id,
+                    media=InputMediaPhoto(media=welcome_photo, caption=welcome_text),
+                    reply_markup=reply_markup
+                )
+            else:
+                await context.bot.edit_message_text(
+                    chat_id=user.id,
+                    message_id=main_message_id,
+                    text=welcome_text,
+                    reply_markup=reply_markup
+                )
+            return  # Succès, on sort de la fonction
+        except Exception as e:
+            print(f"Erreur lors de l'édition du message: {e}")
+            # Si l'édition échoue, supprimer l'ancien message et continuer
+            try:
+                await context.bot.delete_message(chat_id=user.id, message_id=main_message_id)
+            except:
+                pass
+            context.user_data.pop("main_message_id", None)  # Nettoyer l'ID invalide
+    
+    # Si pas de message existant ou édition échouée, envoyer un nouveau message
     try:
         if welcome_photo:
-            await update.message.reply_photo(
+            sent_message = await update.message.reply_photo(
                 photo=welcome_photo,
                 caption=welcome_text,
                 reply_markup=reply_markup,
             )
         else:
-            await update.message.reply_text(
+            sent_message = await update.message.reply_text(
                 text=welcome_text,
                 reply_markup=reply_markup,
             )
+        
+        # Stocker l'ID du message pour les prochaines éditions
+        context.user_data["main_message_id"] = sent_message.message_id
+        
     except Exception as e:
         print(f"Erreur lors de l'affichage du menu: {e}")
         # En cas d'erreur, envoyer un message simple
-        await update.message.reply_text(
+        sent_message = await update.message.reply_text(
             text=welcome_text,
             reply_markup=reply_markup,
         )
+        context.user_data["main_message_id"] = sent_message.message_id
 
 
 # --- Boutons ---
@@ -466,103 +496,166 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
+    print(f"DEBUG: Callback reçu: {query.data}")
+    
+    # Charger les données au début de la fonction
+    data = load_data()
+    
     # Gestion des callbacks admin
     if query.data.startswith("admin_"):
+        print("DEBUG: Routage vers handle_admin_callback (admin_)")
         await handle_admin_callback(query, context)
+        return
+    
+    # Gestion des callbacks de sélection de messages
+    if query.data.startswith("select_msg_") or query.data == "select_all_messages" or query.data == "delete_selected_messages":
+        print("DEBUG: Routage vers handle_admin_callback (sélection)")
+        await handle_admin_callback(query, context)
+        return
+    
+    # Gestion des callbacks des menus du Service
+    if query.data.startswith("service_menu_"):
+        # Gérer les menus du Service
+        menu_index = int(query.data.split("_")[-1])
+        data = load_data()
+        services = data.get("services", [])
+        
+        # Si services est une chaîne, la convertir en liste
+        if isinstance(services, str):
+            services = []
+        
+        if 0 <= menu_index < len(services):
+            # Afficher le contenu du menu sélectionné
+            service = services[menu_index]
+            if isinstance(service, dict):
+                menu_content = service.get("text", "Aucun contenu")
+                menu_photo = service.get("photo", None)
+            else:
+                menu_content = str(service)
+                menu_photo = None
+            
+            # Créer le clavier de retour
+            keyboard = []
+            
+            # Ajouter les menus du Service
+            if services:
+                for i, service in enumerate(services):
+                    keyboard.append([InlineKeyboardButton(service, callback_data=f"service_menu_{i}")])
+            else:
+                keyboard.append([InlineKeyboardButton("📋 Aucun menu disponible", callback_data="no_menus")])
+            
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            if menu_photo:
+                # Afficher avec photo
+                try:
+                    await query.edit_message_media(
+                        media=InputMediaPhoto(media=menu_photo, caption=menu_content),
+                        reply_markup=reply_markup
+                    )
+                except Exception as e:
+                    # Si l'édition du média échoue, afficher le texte
+                    await query.edit_message_text(
+                        text=f"{menu_content}\n\n🖼️ *Photo disponible*",
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+            else:
+                # Afficher sans photo
+                await query.edit_message_text(
+                    text=menu_content,
+                    reply_markup=reply_markup
+                )
+        else:
+            await query.answer("❌ Menu introuvable")
+        return
+    
+    # Gestion du callback "no_menus"
+    if query.data == "no_menus":
+        await query.answer("📋 Aucun menu configuré pour le moment")
         return
     
     # Gestion des callbacks normaux
     if query.data == "back_to_main":
-        # Supprimer tous les anciens messages du bot dans cette conversation
-        await force_delete_all_bot_messages(context, query.from_user.id)
+        # Charger les données
+        data = load_data()
         
-        # Attendre un peu pour s'assurer que la suppression est terminée
-        await asyncio.sleep(0.3)
+        # Construire le clavier avec les menus du Service
+        keyboard = []
         
-        keyboard = [
-            [
-                InlineKeyboardButton("📞 Contact", callback_data="contact"),
-                InlineKeyboardButton("💼 Nos Services", callback_data="services"),
-            ],
-            [
-                InlineKeyboardButton("💬 Nous contacter", callback_data="contact_us"),
-            ]
-        ]
+        # Ajouter les menus du Service
+        services = data.get("services", [])
+        if isinstance(services, str):
+            services = []
+        
+        if services:
+            # Ajouter chaque menu comme un bouton séparé
+            for i, service in enumerate(services):
+                keyboard.append([InlineKeyboardButton(service, callback_data=f"service_menu_{i}")])
+        else:
+            # Si pas de menus, afficher un message
+            keyboard.append([InlineKeyboardButton("📋 Aucun menu disponible", callback_data="no_menus")])
+        
+        
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         welcome_text = data.get("welcome_text", "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :")
         welcome_photo = data.get("welcome_photo")
         
+        # Vérifier s'il y a déjà un message principal à éditer
+        main_message_id = context.user_data.get("main_message_id")
+        
+        if main_message_id:
+            # Essayer d'éditer le message existant
+            try:
+                if welcome_photo:
+                    await context.bot.edit_message_media(
+                        chat_id=query.from_user.id,
+                        message_id=main_message_id,
+                        media=InputMediaPhoto(media=welcome_photo, caption=welcome_text),
+                        reply_markup=reply_markup
+                    )
+                else:
+                    await context.bot.edit_message_text(
+                        chat_id=query.from_user.id,
+                        message_id=main_message_id,
+                        text=welcome_text,
+                        reply_markup=reply_markup
+                    )
+                return  # Succès, on sort de la fonction
+            except Exception as e:
+                print(f"Erreur lors de l'édition du message: {e}")
+                # Si l'édition échoue, supprimer l'ancien message et continuer
+                try:
+                    await context.bot.delete_message(chat_id=query.from_user.id, message_id=main_message_id)
+                except:
+                    pass
+                context.user_data.pop("main_message_id", None)  # Nettoyer l'ID invalide
+        
+        # Si pas de message existant ou édition échouée, envoyer un nouveau message
         try:
             if welcome_photo:
-                await query.message.reply_photo(
+                sent_message = await query.message.reply_photo(
                     photo=welcome_photo,
                     caption=welcome_text,
                     reply_markup=reply_markup
                 )
             else:
-                await query.message.reply_text(
+                sent_message = await query.message.reply_text(
                     text=welcome_text,
                     reply_markup=reply_markup
                 )
+            
+            # Stocker l'ID du message pour les prochaines éditions
+            context.user_data["main_message_id"] = sent_message.message_id
+            
         except Exception as e:
             print(f"Erreur lors de l'affichage du menu principal: {e}")
             await query.answer("Erreur lors de l'affichage du contenu")
-    elif query.data == "contact_us":
-        # Menu pour contacter l'admin
-        keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="back_to_main")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        content = ("💬 **Nous contacter**\n\n"
-                  "Vous pouvez nous envoyer un message directement !\n\n"
-                  "Écrivez votre message ci-dessous et nous vous répondrons rapidement.\n\n"
-                  "📝 *Tapez votre message...*")
-        
-        # Vérifier s'il y a une photo d'accueil pour l'afficher avec le contenu
-        welcome_photo = data.get("welcome_photo")
-        
-        if welcome_photo:
-            # Si on a une photo d'accueil, essayer d'éditer le média
-            try:
-                await query.edit_message_media(
-                    media=InputMediaPhoto(media=welcome_photo, caption=content),
-                    reply_markup=reply_markup
-                )
-            except Exception as e:
-                # Si l'édition du média échoue, essayer d'éditer le texte
-                try:
-                    await query.edit_message_text(
-                        text=f"{content}\n\n🖼️ *Photo d'accueil disponible*",
-                        reply_markup=reply_markup,
-                        parse_mode="Markdown"
-                    )
-                except Exception as e2:
-                    # Si tout échoue, envoyer un nouveau message
-                    try:
-                        await query.message.reply_photo(
-                            photo=welcome_photo,
-                            caption=content,
-                            reply_markup=reply_markup
-                        )
-                    except Exception as e3:
-                        print(f"Erreur lors de l'affichage de la photo: {e3}")
-                        await query.answer("Erreur lors de l'affichage du contenu")
-        else:
-            # Pas de photo, éditer le texte normalement
-            try:
-                await query.edit_message_text(text=content, reply_markup=reply_markup, parse_mode="Markdown")
-            except Exception as e:
-                # Si l'édition échoue, envoyer un nouveau message
-                try:
-                    await query.message.reply_text(text=content, reply_markup=reply_markup, parse_mode="Markdown")
-                except Exception as e2:
-                    print(f"Erreur lors de l'envoi du message: {e2}")
-                    await query.answer("Erreur lors de l'affichage du contenu")
-        
-        # Marquer l'utilisateur comme en mode contact
-        context.user_data["contact_mode"] = True
-        
     else:
+        # Charger les données pour cette section
+        data = load_data()
         content = data.get(query.data, "Texte non défini.")
         keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="back_to_main")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -570,6 +663,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Vérifier s'il y a une photo d'accueil pour l'afficher avec le contenu
         welcome_photo = data.get("welcome_photo")
         
+        # Utiliser safe_edit_message pour gérer les erreurs d'édition
         if welcome_photo:
             # Si on a une photo d'accueil, essayer d'éditer le média
             try:
@@ -578,35 +672,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=reply_markup
                 )
             except Exception as e:
-                # Si l'édition du média échoue, essayer d'éditer le texte
-                try:
-                    await query.edit_message_text(
-                        text=f"{content}\n\n🖼️ *Photo d'accueil disponible*",
-                        reply_markup=reply_markup,
-                        parse_mode="Markdown"
-                    )
-                except Exception as e2:
-                    # Si tout échoue, envoyer un nouveau message
-                    try:
-                        await query.message.reply_photo(
-                            photo=welcome_photo,
-                            caption=content,
-                            reply_markup=reply_markup
-                        )
-                    except Exception as e3:
-                        print(f"Erreur lors de l'affichage de la photo: {e3}")
-                        await query.answer("Erreur lors de l'affichage du contenu")
+                print(f"Erreur lors de l'édition du média: {e}")
+                # Si l'édition du média échoue, utiliser safe_edit_message
+                await safe_edit_message(query, f"{content}\n\n🖼️ *Photo d'accueil disponible*", reply_markup=reply_markup, parse_mode="Markdown")
         else:
-            # Pas de photo, éditer le texte normalement
-            try:
-                await query.edit_message_text(text=content, reply_markup=reply_markup)
-            except Exception as e:
-                # Si l'édition échoue, envoyer un nouveau message
-                try:
-                    await query.message.reply_text(text=content, reply_markup=reply_markup)
-                except Exception as e2:
-                    print(f"Erreur lors de l'envoi du message: {e2}")
-                    await query.answer("Erreur lors de l'affichage du contenu")
+            # Pas de photo, utiliser safe_edit_message
+            await safe_edit_message(query, content, reply_markup=reply_markup)
 
 
 # --- Commande /répondre ---
@@ -686,8 +757,8 @@ async def check_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Créer le panneau admin avec des boutons callback
             keyboard = [
                 [
-                    InlineKeyboardButton("✏️ Modifier Contact", callback_data="admin_edit_contact"),
-                    InlineKeyboardButton("✏️ Modifier Services", callback_data="admin_edit_services")
+                    InlineKeyboardButton("👥 Admin", callback_data="admin_manage_admins"),
+                    InlineKeyboardButton("⚙️ Service", callback_data="admin_service")
                 ],
                 [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
                 [InlineKeyboardButton("📢 Message", callback_data="admin_message_panel")],
@@ -703,6 +774,7 @@ async def check_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Gestion des callbacks admin ---
 async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
+    print(f"DEBUG: handle_admin_callback appelé avec query.data = {query.data}")
     user_id = query.from_user.id
     if user_id not in admins:
         try:
@@ -815,7 +887,7 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         
         keyboard = [
             [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
-            [InlineKeyboardButton("🗑️ Supprimer tous les messages", callback_data="admin_clear_messages")],
+            [InlineKeyboardButton("🗑️ Supprimer messages reçus", callback_data="admin_clear_received_messages")],
             [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
             [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
         ]
@@ -840,46 +912,84 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             parse_mode="Markdown"
         )
         context.user_data["editing"] = "broadcast_message"
-    elif query.data == "admin_clear_messages":
+    elif query.data == "admin_clear_received_messages":
         # Afficher un message de traitement
         await safe_edit_message(
             query,
             "🗑️ **Suppression en cours...**\n\n"
-            "Suppression de tous les messages du bot avec les utilisateurs...\n"
+            "Suppression des messages reçus par le bot...\n"
             "Cela peut prendre quelques instants.",
             parse_mode="Markdown"
         )
         
-        # Supprimer les messages stockés
+        # Supprimer SEULEMENT les messages reçus par le bot (pas les menus)
         users_data = load_users()
-        users_data["messages"] = []
+        users_data["messages"] = []  # Vider la liste des messages reçus
         save_users(users_data)
         
-        # Supprimer les messages du bot avec les utilisateurs
-        deleted_count = await clear_all_bot_messages(context)
+        # Afficher le résultat
+        await safe_edit_message(
+            query,
+            "✅ **Suppression terminée !**\n\n"
+            "🗑️ Tous les messages reçus ont été supprimés\n\n"
+            "Les menus du bot ont été conservés.",
+            parse_mode="Markdown"
+        )
         
-        # Supprimer aussi les messages de confirmation et les callbacks
-        # en supprimant les messages récents du bot dans tous les chats
-        try:
-            # Supprimer les messages du bot dans le chat admin actuel
-            admin_chat_id = query.from_user.id
-            await force_delete_all_bot_messages(context, admin_chat_id)
-        except:
-            pass
+        # Retourner au menu principal après 3 secondes
+        await asyncio.sleep(3)
         
+        # Afficher le menu principal
+        users_data = load_users()
         keyboard = [
             [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
-            [InlineKeyboardButton("🗑️ Supprimer tous les messages", callback_data="admin_clear_messages")],
+            [InlineKeyboardButton("🗑️ Supprimer messages reçus", callback_data="admin_clear_received_messages")],
             [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
             [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
         ]
         markup = InlineKeyboardMarkup(keyboard)
-        # Afficher le message de confirmation
+        
         await safe_edit_message(
             query,
-            f"✅ **Suppression terminée !**\n\n"
-            f"*Messages supprimés :* {deleted_count}\n"
-            f"*Messages stockés supprimés :* Tous\n\n"
+            "📢 **Panel Message**\n\n"
+            f"*Utilisateurs enregistrés :* {len(users_data['users'])}\n"
+            f"*Messages reçus :* {len(users_data.get('messages', []))}\n\n"
+            "Choisissez une action :",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        
+    elif query.data == "admin_clear_received_messages":
+        # Supprimer les messages reçus par le bot
+        users_data = load_users()
+        messages_count = len(users_data.get("messages", []))
+        
+        # Supprimer les messages stockés
+        users_data["messages"] = []
+        save_users(users_data)
+        
+        await safe_edit_message(
+            query,
+            f"✅ **Messages reçus supprimés !**\n\n"
+            f"🗑️ {messages_count} messages reçus supprimés\n\n"
+            "Les menus du bot ont été conservés.",
+            parse_mode="Markdown"
+        )
+        
+        # Retourner au menu principal après 3 secondes
+        await asyncio.sleep(3)
+        
+        # Afficher le menu principal
+        keyboard = [
+            [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
+            [InlineKeyboardButton("🗑️ Supprimer messages reçus", callback_data="admin_clear_received_messages")],
+            [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
+            [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        
+        await safe_edit_message(
+            query,
             "📢 **Panel Message**\n\n"
             f"*Utilisateurs enregistrés :* {len(users_data['users'])}\n"
             f"*Messages reçus :* 0\n\n"
@@ -887,13 +997,6 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             reply_markup=markup,
             parse_mode="Markdown"
         )
-        
-        # Supprimer le message de confirmation après 3 secondes
-        try:
-            await asyncio.sleep(3)
-            await context.bot.delete_message(chat_id=query.from_user.id, message_id=query.message.message_id)
-        except:
-            pass
     elif query.data == "admin_view_messages":
         users_data = load_users()
         messages = users_data["messages"]
@@ -948,16 +1051,256 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
     elif query.data == "admin_panel":
         keyboard = [
             [
-                InlineKeyboardButton("✏️ Modifier Contact", callback_data="admin_edit_contact"),
-                InlineKeyboardButton("✏️ Modifier Services", callback_data="admin_edit_services")
+                InlineKeyboardButton("👥 Admin", callback_data="admin_manage_admins"),
+                InlineKeyboardButton("⚙️ Service", callback_data="admin_service")
             ],
             [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
             [InlineKeyboardButton("📢 Message", callback_data="admin_message_panel")],
-            [InlineKeyboardButton("👥 Gestion Admins", callback_data="admin_manage_admins")],
             [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
         ]
         markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(query, "⚙️ Panneau Admin :", reply_markup=markup)
+    
+    elif query.data == "admin_service":
+        # Menu Service - Gestion des menus du /start
+        keyboard = [
+            [InlineKeyboardButton("📋 Voir les menus actuels", callback_data="admin_view_menus")],
+            [InlineKeyboardButton("➕ Ajouter un menu", callback_data="admin_add_menu")],
+            [InlineKeyboardButton("✏️ Modifier un menu", callback_data="admin_edit_menu")],
+            [InlineKeyboardButton("🗑️ Supprimer un menu", callback_data="admin_delete_menu")],
+            [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "⚙️ **Service - Gestion des Menus**\n\n"
+            "Gérez les menus qui s'affichent dans la commande /start\n\n"
+            "Choisissez une action :",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+    
+    elif query.data == "admin_view_menus":
+        # Afficher les menus actuels
+        data = load_data()
+        services = data.get("services", [])
+        
+        # Si services est une chaîne, la convertir en liste
+        if isinstance(services, str):
+            services = []
+        
+        if not services:
+            message_text = "📋 **Menus actuels**\n\n❌ Aucun menu configuré"
+        else:
+            message_text = "📋 **Menus actuels**\n\n"
+            for i, service in enumerate(services, 1):
+                message_text += f"**{i}.** {service}\n"
+        
+        keyboard = [[InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(query, message_text, reply_markup=markup, parse_mode="Markdown")
+    
+    elif query.data == "admin_add_menu":
+        # Ajouter un nouveau menu
+        keyboard = [[InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "➕ **Ajouter un Menu**\n\n"
+            "Envoyez le texte du nouveau menu que vous voulez ajouter :",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        context.user_data["editing"] = "add_menu"
+    
+    elif query.data == "admin_edit_menu":
+        # Modifier un menu existant
+        data = load_data()
+        services = data.get("services", [])
+        
+        # Si services est une chaîne, la convertir en liste
+        if isinstance(services, str):
+            services = []
+        
+        if not services:
+            keyboard = [[InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            await safe_edit_message(
+                query,
+                "✏️ **Modifier un Menu**\n\n❌ Aucun menu à modifier",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+            return
+        
+        # Créer les boutons pour chaque menu
+        keyboard = []
+        for i, service in enumerate(services):
+            # Si c'est un dictionnaire, afficher le nom, sinon le texte complet
+            if isinstance(service, dict):
+                service_name = service.get("name", f"Menu {i+1}")
+            else:
+                service_name = str(service)
+            keyboard.append([InlineKeyboardButton(f"✏️ {service_name[:30]}...", callback_data=f"admin_edit_menu_{i}")])
+        keyboard.append([InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")])
+        
+        markup = InlineKeyboardMarkup(keyboard)
+        message_text = "✏️ **Modifier un Menu**\n\nChoisissez le menu à modifier :"
+        await safe_edit_message(query, message_text, reply_markup=markup, parse_mode="Markdown")
+    
+    elif query.data == "admin_delete_menu":
+        # Supprimer un menu
+        data = load_data()
+        services = data.get("services", [])
+        
+        # Si services est une chaîne, la convertir en liste
+        if isinstance(services, str):
+            services = []
+        
+        if not services:
+            keyboard = [[InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            await safe_edit_message(
+                query,
+                "🗑️ **Supprimer un Menu**\n\n❌ Aucun menu à supprimer",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+            return
+        
+        # Créer les boutons pour chaque menu
+        keyboard = []
+        for i, service in enumerate(services):
+            keyboard.append([InlineKeyboardButton(f"🗑️ {service[:30]}...", callback_data=f"admin_delete_menu_{i}")])
+        keyboard.append([InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")])
+        
+        markup = InlineKeyboardMarkup(keyboard)
+        message_text = "🗑️ **Supprimer un Menu**\n\nChoisissez le menu à supprimer :"
+        await safe_edit_message(query, message_text, reply_markup=markup, parse_mode="Markdown")
+    
+    elif query.data.startswith("admin_edit_menu_"):
+        # Modifier un menu spécifique
+        menu_index = int(query.data.split("_")[-1])
+        data = load_data()
+        services = data.get("services", [])
+        
+        # Si services est une chaîne, la convertir en liste
+        if isinstance(services, str):
+            services = []
+        
+        if 0 <= menu_index < len(services):
+            context.user_data["editing_menu_index"] = menu_index
+            
+            # Afficher les options de modification
+            current_service = services[menu_index]
+            if isinstance(current_service, dict):
+                service_name = current_service.get("name", "Sans nom")
+                service_text = current_service.get("text", "Aucun texte")
+                service_photo = current_service.get("photo", None)
+            else:
+                service_name = str(current_service)
+                service_text = str(current_service)
+                service_photo = None
+            
+            keyboard = [
+                [InlineKeyboardButton("📝 Modifier le nom", callback_data=f"admin_edit_menu_name_{menu_index}")],
+                [InlineKeyboardButton("📄 Modifier le texte", callback_data=f"admin_edit_menu_text_{menu_index}")],
+                [InlineKeyboardButton("🖼️ Modifier la photo", callback_data=f"admin_edit_menu_photo_{menu_index}")],
+                [InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")]
+            ]
+            markup = InlineKeyboardMarkup(keyboard)
+            
+            photo_info = "\n🖼️ Photo : Oui" if service_photo else "\n🖼️ Photo : Non"
+            await safe_edit_message(
+                query,
+                f"✏️ **Modifier le Menu**\n\n"
+                f"**Nom actuel :** {service_name}\n"
+                f"**Texte actuel :** {service_text[:100]}{'...' if len(service_text) > 100 else ''}{photo_info}\n\n"
+                f"Choisissez ce que vous voulez modifier :",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+        else:
+            await query.answer("❌ Menu introuvable")
+    
+    elif query.data.startswith("admin_edit_menu_name_"):
+        # Modifier le nom d'un menu
+        menu_index = int(query.data.split("_")[-1])
+        context.user_data["editing_menu_index"] = menu_index
+        context.user_data["editing_menu_field"] = "name"
+        
+        keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data=f"admin_edit_menu_{menu_index}")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "📝 **Modifier le nom du menu**\n\nEnvoyez le nouveau nom pour ce menu :",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        context.user_data["editing"] = "edit_menu_field"
+    
+    elif query.data.startswith("admin_edit_menu_text_"):
+        # Modifier le texte d'un menu
+        menu_index = int(query.data.split("_")[-1])
+        context.user_data["editing_menu_index"] = menu_index
+        context.user_data["editing_menu_field"] = "text"
+        
+        keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data=f"admin_edit_menu_{menu_index}")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "📄 **Modifier le texte du menu**\n\nEnvoyez le nouveau texte pour ce menu :",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        context.user_data["editing"] = "edit_menu_field"
+    
+    elif query.data.startswith("admin_edit_menu_photo_"):
+        # Modifier la photo d'un menu
+        menu_index = int(query.data.split("_")[-1])
+        context.user_data["editing_menu_index"] = menu_index
+        context.user_data["editing_menu_field"] = "photo"
+        
+        keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data=f"admin_edit_menu_{menu_index}")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "🖼️ **Modifier la photo du menu**\n\nEnvoyez la nouvelle photo pour ce menu :",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        context.user_data["editing"] = "edit_menu_field"
+    
+    elif query.data.startswith("admin_delete_menu_"):
+        # Supprimer un menu spécifique
+        menu_index = int(query.data.split("_")[-1])
+        data = load_data()
+        services = data.get("services", [])
+        
+        # Si services est une chaîne, la convertir en liste
+        if isinstance(services, str):
+            services = []
+        
+        if 0 <= menu_index < len(services):
+            # Supprimer le menu
+            deleted_menu = services.pop(menu_index)
+            data["services"] = services
+            save_data(data)
+            
+            # Recharger les données pour s'assurer de la cohérence
+            data = load_data()
+            
+            keyboard = [[InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            await safe_edit_message(
+                query,
+                f"✅ **Menu supprimé**\n\n"
+                f"Le menu '{deleted_menu}' a été supprimé avec succès !",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+        else:
+            await query.answer("❌ Menu introuvable")
     
     elif query.data == "admin_manage_admins":
         # Vérifier les permissions
@@ -992,12 +1335,39 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             await query.answer("❌ Vous n'avez pas les permissions.")
             return
         
-        context.user_data["adding_admin"] = True
+        # Afficher la liste des utilisateurs récents pour sélection
+        users_data = load_users()
+        users = users_data.get("users", [])
+        
+        if not users:
+            keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="admin_manage_admins")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            await safe_edit_message(
+                query,
+                "➕ **Ajouter un Administrateur**\n\n"
+                "❌ Aucun utilisateur trouvé pour ajouter comme admin.",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+            return
+        
+        # Créer les boutons pour chaque utilisateur
+        keyboard = []
+        for user in users[:10]:  # Limiter à 10 utilisateurs récents
+            user_id = user["user_id"]
+            username = user.get("username", "N/A")
+            name = user.get("name", "N/A")
+            button_text = f"➕ {name} (@{username})"
+            keyboard.append([InlineKeyboardButton(button_text, callback_data=f"admin_add_user_{user_id}")])
+        
+        keyboard.append([InlineKeyboardButton("🔙 Retour", callback_data="admin_manage_admins")])
+        markup = InlineKeyboardMarkup(keyboard)
+        
         await safe_edit_message(
-            query, 
+            query,
             "➕ **Ajouter un Administrateur**\n\n"
-            "Envoyez l'@username ou l'ID de l'utilisateur à ajouter :\n"
-            "Exemple: `@username` ou `123456789`",
+            "Choisissez un utilisateur à ajouter comme administrateur :",
+            reply_markup=markup,
             parse_mode="Markdown"
         )
     
@@ -1006,12 +1376,116 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             await query.answer("❌ Seul le Chef peut supprimer des administrateurs.")
             return
         
-        context.user_data["removing_admin"] = True
+        # Afficher la liste des administrateurs pour sélection
+        admins_data = load_admins()
+        
+        if not admins_data:
+            keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="admin_manage_admins")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            await safe_edit_message(
+                query,
+                "❌ **Supprimer un Administrateur**\n\n"
+                "❌ Aucun administrateur à supprimer.",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+            return
+        
+        # Créer les boutons pour chaque admin
+        keyboard = []
+        for admin_id, admin_info in admins_data.items():
+            role = admin_info.get("role", "STAFF")
+            username = admin_info.get("username", "N/A")
+            name = admin_info.get("name", "N/A")
+            button_text = f"❌ {name} (@{username}) - {role}"
+            keyboard.append([InlineKeyboardButton(button_text, callback_data=f"admin_remove_user_{admin_id}")])
+        
+        keyboard.append([InlineKeyboardButton("🔙 Retour", callback_data="admin_manage_admins")])
+        markup = InlineKeyboardMarkup(keyboard)
+        
         await safe_edit_message(
-            query, 
+            query,
             "❌ **Supprimer un Administrateur**\n\n"
-            "Envoyez l'@username ou l'ID de l'utilisateur à supprimer :\n"
-            "Exemple: `@username` ou `123456789`",
+            "Choisissez un administrateur à supprimer :",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+    
+    elif query.data.startswith("admin_add_user_"):
+        # Ajouter un utilisateur comme administrateur
+        target_user_id = int(query.data.split("_")[-1])
+        
+        # Récupérer les informations de l'utilisateur
+        users_data = load_users()
+        target_user = None
+        for user in users_data.get("users", []):
+            if user["user_id"] == target_user_id:
+                target_user = user
+                break
+        
+        if not target_user:
+            await query.answer("❌ Utilisateur introuvable")
+            return
+        
+        # Ajouter comme administrateur
+        admins_data = load_admins()
+        admins_data[str(target_user_id)] = {
+            "username": target_user.get("username", "N/A"),
+            "name": target_user.get("name", "N/A"),
+            "role": "STAFF",
+            "added_by": user_id,
+            "added_date": str(update.effective_message.date)
+        }
+        save_admins(admins_data)
+        
+        # Mettre à jour la liste des admins en mémoire
+        admins.add(target_user_id)
+        
+        keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="admin_manage_admins")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            f"✅ **Administrateur ajouté !**\n\n"
+            f"**{target_user.get('name', 'N/A')}** (@{target_user.get('username', 'N/A')})\n"
+            f"ID: `{target_user_id}`\n"
+            f"Rôle: **STAFF**",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+    
+    elif query.data.startswith("admin_remove_user_"):
+        # Supprimer un administrateur
+        target_user_id = int(query.data.split("_")[-1])
+        
+        # Vérifier que ce n'est pas le chef qui se supprime lui-même
+        if target_user_id == user_id:
+            await query.answer("❌ Vous ne pouvez pas vous supprimer vous-même")
+            return
+        
+        # Récupérer les informations de l'admin
+        admins_data = load_admins()
+        admin_info = admins_data.get(str(target_user_id))
+        
+        if not admin_info:
+            await query.answer("❌ Administrateur introuvable")
+            return
+        
+        # Supprimer l'administrateur
+        del admins_data[str(target_user_id)]
+        save_admins(admins_data)
+        
+        # Mettre à jour la liste des admins en mémoire
+        admins.discard(target_user_id)
+        
+        keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="admin_manage_admins")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            f"✅ **Administrateur supprimé !**\n\n"
+            f"**{admin_info.get('name', 'N/A')}** (@{admin_info.get('username', 'N/A')})\n"
+            f"ID: `{target_user_id}`\n"
+            f"Rôle: **{admin_info.get('role', 'STAFF')}**",
+            reply_markup=markup,
             parse_mode="Markdown"
         )
     
@@ -1019,6 +1493,8 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         # Gérer la sélection d'un message
         msg_index = int(query.data.split("_")[2]) - 1  # Convertir en index 0-based
         user_id = query.from_user.id
+        
+        print(f"DEBUG: Sélection du message {msg_index} par l'utilisateur {user_id}")
         
         if not is_admin_or_higher(user_id):
             await query.answer("❌ Vous n'avez pas les permissions.")
@@ -1028,16 +1504,27 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         if "selected_messages" not in context.user_data:
             context.user_data["selected_messages"] = []
         
+        print(f"DEBUG: Avant sélection - selected_messages = {context.user_data['selected_messages']}")
+        
         # Ajouter ou retirer le message de la sélection
         if msg_index in context.user_data["selected_messages"]:
             context.user_data["selected_messages"].remove(msg_index)
             await query.answer("❌ Message désélectionné")
+            print(f"DEBUG: Message {msg_index} désélectionné")
         else:
             context.user_data["selected_messages"].append(msg_index)
             await query.answer("✅ Message sélectionné")
+            print(f"DEBUG: Message {msg_index} sélectionné")
+        
+        print(f"DEBUG: Après sélection - selected_messages = {context.user_data['selected_messages']}")
         
         # Mettre à jour l'affichage
-        await update_message_display(query, context)
+        try:
+            await update_message_display(query, context)
+            print("DEBUG: update_message_display appelé avec succès")
+        except Exception as e:
+            print(f"DEBUG: Erreur dans update_message_display: {e}")
+            await query.answer("Erreur lors de la mise à jour")
     
     elif query.data == "select_all_messages":
         # Sélectionner tous les messages
@@ -1062,11 +1549,15 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         # Supprimer les messages sélectionnés
         user_id = query.from_user.id
         
+        print(f"DEBUG: Tentative de suppression par l'utilisateur {user_id}")
+        
         if not is_admin_or_higher(user_id):
             await query.answer("❌ Vous n'avez pas les permissions.")
             return
         
         selected_messages = context.user_data.get("selected_messages", [])
+        print(f"DEBUG: Messages sélectionnés: {selected_messages}")
+        
         if not selected_messages:
             await query.answer("❌ Aucun message sélectionné")
             return
@@ -1076,19 +1567,35 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         messages = users_data.get("messages", [])
         recent_messages = messages[-10:]
         
+        print(f"DEBUG: Nombre total de messages: {len(messages)}")
+        print(f"DEBUG: Messages récents: {len(recent_messages)}")
+        
         # Supprimer les messages sélectionnés (en ordre inverse pour éviter les problèmes d'index)
         deleted_count = 0
         for index in sorted(selected_messages, reverse=True):
+            print(f"DEBUG: Traitement de l'index {index}")
             if 0 <= index < len(recent_messages):
                 # Trouver l'index dans la liste complète
-                full_index = len(messages) - 10 + index
+                # Les messages récents sont les 10 derniers, donc l'index dans la liste complète est :
+                full_index = len(messages) - len(recent_messages) + index
+                print(f"DEBUG: Index complet calculé: {full_index} (len(messages)={len(messages)}, len(recent)={len(recent_messages)}, index={index})")
                 if 0 <= full_index < len(messages):
+                    print(f"DEBUG: Suppression du message à l'index {full_index}")
                     messages.pop(full_index)
                     deleted_count += 1
+                    print(f"DEBUG: Message supprimé, count = {deleted_count}")
+                else:
+                    print(f"DEBUG: Index {full_index} hors limites")
+            else:
+                print(f"DEBUG: Index {index} hors limites des messages récents")
+        
+        print(f"DEBUG: Nombre de messages supprimés: {deleted_count}")
+        print(f"DEBUG: Nouveau nombre total de messages: {len(messages)}")
         
         # Sauvegarder les modifications
         users_data["messages"] = messages
         save_users(users_data)
+        print("DEBUG: Données sauvegardées")
         
         # Nettoyer la sélection
         context.user_data["selected_messages"] = []
@@ -1096,7 +1603,12 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         await query.answer(f"✅ {deleted_count} messages supprimés")
         
         # Mettre à jour l'affichage
-        await update_message_display(query, context)
+        try:
+            await update_message_display(query, context)
+            print("DEBUG: Affichage mis à jour avec succès")
+        except Exception as e:
+            print(f"DEBUG: Erreur lors de la mise à jour de l'affichage: {e}")
+            await query.answer("Erreur lors de la mise à jour")
     
     elif query.data.startswith("role_"):
         # Gérer la sélection de rôle
@@ -1149,12 +1661,29 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         user_id = query.from_user.id
         admins.discard(user_id)
         context.user_data.clear()
-        keyboard = [
-            [
-                InlineKeyboardButton("📞 Contact", callback_data="contact"),
-                InlineKeyboardButton("💼 Nos Services", callback_data="services"),
-            ]
-        ]
+        
+        # Charger les données
+        data = load_data()
+        
+        # Construire le clavier avec les menus du Service
+        keyboard = []
+        
+        # Ajouter les menus du Service
+        services = data.get("services", [])
+        if isinstance(services, str):
+            services = []
+        
+        if services:
+            # Ajouter chaque menu comme un bouton séparé
+            for i, service in enumerate(services):
+                if isinstance(service, dict):
+                    service_name = service.get("name", f"Menu {i+1}")
+                else:
+                    service_name = str(service)
+                keyboard.append([InlineKeyboardButton(service_name, callback_data=f"service_menu_{i}")])
+        else:
+            # Si pas de menus, afficher un message
+            keyboard.append([InlineKeyboardButton("📋 Aucun menu disponible", callback_data="no_menus")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(
             query,
@@ -1219,7 +1748,6 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Retour au panel message
             keyboard = [
                 [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
-                [InlineKeyboardButton("🗑️ Supprimer tous les messages", callback_data="admin_clear_messages")],
                 [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
                 [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
             ]
@@ -1232,6 +1760,168 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown",
                 reply_markup=markup
             )
+        elif section == "add_menu":
+            # Ajouter un nouveau menu
+            new_menu_text = update.message.text
+            data = load_data()
+            if "services" not in data:
+                data["services"] = []
+            # Si services est une chaîne, la convertir en liste
+            if isinstance(data["services"], str):
+                data["services"] = []
+            
+            # Créer un menu avec la nouvelle structure
+            new_menu = {
+                "name": new_menu_text,
+                "text": new_menu_text,
+                "photo": None
+            }
+            data["services"].append(new_menu)
+            save_data(data)
+            context.user_data["editing"] = None
+            
+            # Recharger les données pour s'assurer de la cohérence
+            data = load_data()
+            
+            # Retour au menu Service
+            keyboard = [
+                [InlineKeyboardButton("📋 Voir les menus actuels", callback_data="admin_view_menus")],
+                [InlineKeyboardButton("➕ Ajouter un menu", callback_data="admin_add_menu")],
+                [InlineKeyboardButton("✏️ Modifier un menu", callback_data="admin_edit_menu")],
+                [InlineKeyboardButton("🗑️ Supprimer un menu", callback_data="admin_delete_menu")],
+                [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+            ]
+            markup = InlineKeyboardMarkup(keyboard)
+            
+            # Supprimer le message de l'utilisateur et envoyer la réponse
+            try:
+                await update.message.delete()
+            except:
+                pass
+            
+            await update.message.reply_text(
+                f"✅ **Menu ajouté !**\n\n"
+                f"Le menu '{new_menu}' a été ajouté avec succès !\n\n"
+                f"⚙️ **Service - Gestion des Menus**",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+        elif section == "edit_menu":
+            # Modifier un menu existant (ancienne méthode)
+            new_text = update.message.text
+            menu_index = context.user_data.get("editing_menu_index")
+            data = load_data()
+            services = data.get("services", [])
+            
+            # Si services est une chaîne, la convertir en liste
+            if isinstance(services, str):
+                services = []
+            
+            if 0 <= menu_index < len(services):
+                old_menu = services[menu_index]
+                services[menu_index] = new_text
+                data["services"] = services
+                save_data(data)
+                context.user_data["editing"] = None
+                context.user_data["editing_menu_index"] = None
+                
+                # Recharger les données pour s'assurer de la cohérence
+                data = load_data()
+                
+                # Retour au menu Service
+                keyboard = [
+                    [InlineKeyboardButton("📋 Voir les menus actuels", callback_data="admin_view_menus")],
+                    [InlineKeyboardButton("➕ Ajouter un menu", callback_data="admin_add_menu")],
+                    [InlineKeyboardButton("✏️ Modifier un menu", callback_data="admin_edit_menu")],
+                    [InlineKeyboardButton("🗑️ Supprimer un menu", callback_data="admin_delete_menu")],
+                    [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+                ]
+                markup = InlineKeyboardMarkup(keyboard)
+                
+                # Supprimer le message de l'utilisateur et envoyer la réponse
+                try:
+                    await update.message.delete()
+                except:
+                    pass
+                
+                await update.message.reply_text(
+                    f"✅ **Menu modifié !**\n\n"
+                    f"Ancien : {old_menu}\n"
+                    f"Nouveau : {new_text}\n\n"
+                    f"⚙️ **Service - Gestion des Menus**",
+                    reply_markup=markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await update.message.reply_text("❌ Erreur : Menu introuvable")
+        
+        elif section == "edit_menu_field":
+            # Modifier un champ spécifique d'un menu
+            new_value = update.message.text
+            menu_index = context.user_data.get("editing_menu_index")
+            field = context.user_data.get("editing_menu_field")
+            data = load_data()
+            services = data.get("services", [])
+            
+            # Si services est une chaîne, la convertir en liste
+            if isinstance(services, str):
+                services = []
+            
+            if 0 <= menu_index < len(services):
+                # Convertir en dictionnaire si c'est une chaîne
+                if isinstance(services[menu_index], str):
+                    services[menu_index] = {
+                        "name": services[menu_index],
+                        "text": services[menu_index],
+                        "photo": None
+                    }
+                
+                # Mettre à jour le champ spécifique
+                if field == "photo":
+                    # Pour les photos, on stocke l'ID de la photo
+                    if update.message.photo:
+                        services[menu_index][field] = update.message.photo[-1].file_id
+                    else:
+                        await update.message.reply_text("❌ Veuillez envoyer une photo valide.")
+                        return
+                else:
+                    services[menu_index][field] = new_value
+                
+                data["services"] = services
+                save_data(data)
+                context.user_data["editing"] = None
+                context.user_data["editing_menu_index"] = None
+                context.user_data["editing_menu_field"] = None
+                
+                # Recharger les données pour s'assurer de la cohérence
+                data = load_data()
+                
+                # Retour au menu Service
+                keyboard = [
+                    [InlineKeyboardButton("📋 Voir les menus actuels", callback_data="admin_view_menus")],
+                    [InlineKeyboardButton("➕ Ajouter un menu", callback_data="admin_add_menu")],
+                    [InlineKeyboardButton("✏️ Modifier un menu", callback_data="admin_edit_menu")],
+                    [InlineKeyboardButton("🗑️ Supprimer un menu", callback_data="admin_delete_menu")],
+                    [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+                ]
+                markup = InlineKeyboardMarkup(keyboard)
+                
+                # Supprimer le message de l'utilisateur et envoyer la réponse
+                try:
+                    await update.message.delete()
+                except:
+                    pass
+                
+                field_names = {"name": "nom", "text": "texte", "photo": "photo"}
+                await update.message.reply_text(
+                    f"✅ **{field_names.get(field, field)} modifié !**\n\n"
+                    f"Le {field_names.get(field, field)} du menu a été mis à jour.\n\n"
+                    f"⚙️ **Service - Gestion des Menus**",
+                    reply_markup=markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await update.message.reply_text("❌ Erreur : Menu introuvable")
         else:
             # Gestion du texte (contact, services, welcome_text)
             data[section] = update.message.text
@@ -1255,8 +1945,8 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Retour au menu admin principal
                 keyboard = [
                     [
-                        InlineKeyboardButton("✏️ Modifier Contact", callback_data="admin_edit_contact"),
-                        InlineKeyboardButton("✏️ Modifier Services", callback_data="admin_edit_services")
+                        InlineKeyboardButton("👥 Admin", callback_data="admin_manage_admins"),
+                        InlineKeyboardButton("⚙️ Service", callback_data="admin_service")
                     ],
                     [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
                     [InlineKeyboardButton("📢 Message", callback_data="admin_message_panel")],
@@ -1271,127 +1961,6 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Commande non reconnue.")
 
 
-# --- Gestion de l'ajout d'administrateur ---
-async def handle_add_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Gérer l'ajout d'un administrateur"""
-    user_input = update.message.text.strip()
-    user_id = update.message.from_user.id
-    
-    # Vérifier les permissions
-    if not is_admin_or_higher(user_id):
-        await update.message.reply_text("❌ Vous n'avez pas les permissions.")
-        return
-    
-    try:
-        # Extraire l'ID utilisateur
-        target_user_id = None
-        target_username = None
-        
-        if user_input.startswith("@"):
-            # C'est un @username
-            target_username = user_input[1:]
-            # Pour l'instant, on demande l'ID manuellement
-            await update.message.reply_text(
-                f"👤 Username détecté: @{target_username}\n\n"
-                "Veuillez envoyer l'ID numérique de cet utilisateur :"
-            )
-            context.user_data["pending_username"] = target_username
-            return
-        else:
-            # C'est un ID numérique
-            target_user_id = int(user_input)
-        
-        # Si on a un username en attente, l'associer à l'ID
-        if context.user_data.get("pending_username"):
-            target_username = context.user_data["pending_username"]
-            context.user_data.pop("pending_username", None)
-        
-        # Demander le rôle
-        context.user_data["pending_admin_id"] = target_user_id
-        context.user_data["pending_admin_username"] = target_username
-        context.user_data["adding_admin"] = False
-        context.user_data["choosing_role"] = True
-        
-        keyboard = [
-            [InlineKeyboardButton("👑 Chef", callback_data="role_CHEF")],
-            [InlineKeyboardButton("🛡️ Admin", callback_data="role_ADMIN")],
-            [InlineKeyboardButton("👤 Staff", callback_data="role_STAFF")]
-        ]
-        markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            f"👤 **Ajouter Administrateur**\n\n"
-            f"ID: `{target_user_id}`\n"
-            f"Username: @{target_username or 'N/A'}\n\n"
-            f"Choisissez le rôle :",
-            reply_markup=markup,
-            parse_mode="Markdown"
-        )
-        
-    except ValueError:
-        await update.message.reply_text("❌ L'ID doit être un nombre valide.")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Erreur: {e}")
-
-# --- Gestion de la suppression d'administrateur ---
-async def handle_remove_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Gérer la suppression d'un administrateur"""
-    user_input = update.message.text.strip()
-    user_id = update.message.from_user.id
-    
-    # Vérifier les permissions (seul le chef peut supprimer)
-    if not is_chef(user_id):
-        await update.message.reply_text("❌ Seul le Chef peut supprimer des administrateurs.")
-        return
-    
-    try:
-        # Extraire l'ID utilisateur
-        target_user_id = None
-        
-        if user_input.startswith("@"):
-            # C'est un @username, on doit trouver l'ID
-            target_username = user_input[1:]
-            admins_data = load_admins()
-            for admin_id, admin_info in admins_data.items():
-                if admin_info.get("username") == target_username:
-                    target_user_id = int(admin_id)
-                    break
-            
-            if not target_user_id:
-                await update.message.reply_text("❌ Utilisateur non trouvé dans la liste des administrateurs.")
-                return
-        else:
-            # C'est un ID numérique
-            target_user_id = int(user_input)
-        
-        # Vérifier que l'utilisateur existe dans la liste
-        admins_data = load_admins()
-        if str(target_user_id) not in admins_data:
-            await update.message.reply_text("❌ Cet utilisateur n'est pas dans la liste des administrateurs.")
-            return
-        
-        # Supprimer l'administrateur
-        admin_info = admins_data.pop(str(target_user_id))
-        save_admins(admins_data)
-        
-        # Retirer de la session active si connecté
-        admins.discard(target_user_id)
-        
-        await update.message.reply_text(
-            f"✅ Administrateur supprimé avec succès !\n\n"
-            f"ID: `{target_user_id}`\n"
-            f"Username: @{admin_info.get('username', 'N/A')}\n"
-            f"Rôle: {admin_info.get('role', 'N/A')}",
-            parse_mode="Markdown"
-        )
-        
-        # Sortir du mode suppression
-        context.user_data["removing_admin"] = False
-        
-    except ValueError:
-        await update.message.reply_text("❌ L'ID doit être un nombre valide.")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Erreur: {e}")
 
 # --- Gestion du texte et des photos (mot de passe ou actions admin) ---
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1400,16 +1969,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Si c'est un admin, gérer les actions admin
     if update.message.from_user.id in admins:
-        # Gérer l'ajout d'administrateur
-        if context.user_data.get("adding_admin"):
-            await handle_add_admin(update, context)
-            return
-        
-        # Gérer la suppression d'administrateur
-        if context.user_data.get("removing_admin"):
-            await handle_remove_admin(update, context)
-            return
-        
         await admin_actions(update, context)
         return
     
