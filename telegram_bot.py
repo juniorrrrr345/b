@@ -653,63 +653,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             print(f"Erreur lors de l'affichage du menu principal: {e}")
             await query.answer("Erreur lors de l'affichage du contenu")
-    elif query.data == "contact_us":
-        # Charger les données
-        data = load_data()
-        
-        # Menu pour contacter l'admin
-        keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="back_to_main")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        content = ("💬 **Nous contacter**\n\n"
-                  "Vous pouvez nous envoyer un message directement !\n\n"
-                  "Écrivez votre message ci-dessous et nous vous répondrons rapidement.\n\n"
-                  "📝 *Tapez votre message...*")
-        
-        # Vérifier s'il y a une photo d'accueil pour l'afficher avec le contenu
-        welcome_photo = data.get("welcome_photo")
-        
-        if welcome_photo:
-            # Si on a une photo d'accueil, essayer d'éditer le média
-            try:
-                await query.edit_message_media(
-                    media=InputMediaPhoto(media=welcome_photo, caption=content),
-                    reply_markup=reply_markup
-                )
-            except Exception as e:
-                # Si l'édition du média échoue, essayer d'éditer le texte
-                try:
-                    await query.edit_message_text(
-                        text=f"{content}\n\n🖼️ *Photo d'accueil disponible*",
-                        reply_markup=reply_markup,
-                        parse_mode="Markdown"
-                    )
-                except Exception as e2:
-                    # Si tout échoue, envoyer un nouveau message
-                    try:
-                        await query.message.reply_photo(
-                            photo=welcome_photo,
-                            caption=content,
-                            reply_markup=reply_markup
-                        )
-                    except Exception as e3:
-                        print(f"Erreur lors de l'affichage de la photo: {e3}")
-                        await query.answer("Erreur lors de l'affichage du contenu")
-        else:
-            # Pas de photo, éditer le texte normalement
-            try:
-                await query.edit_message_text(text=content, reply_markup=reply_markup, parse_mode="Markdown")
-            except Exception as e:
-                # Si l'édition échoue, envoyer un nouveau message
-                try:
-                    await query.message.reply_text(text=content, reply_markup=reply_markup, parse_mode="Markdown")
-                except Exception as e2:
-                    print(f"Erreur lors de l'envoi du message: {e2}")
-                    await query.answer("Erreur lors de l'affichage du contenu")
-        
-        # Marquer l'utilisateur comme en mode contact
-        context.user_data["contact_mode"] = True
-        
     else:
         # Charger les données pour cette section
         data = load_data()
