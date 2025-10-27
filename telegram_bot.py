@@ -891,7 +891,8 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         
         keyboard = [
             [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
-            [InlineKeyboardButton("🗑️ Supprimer tous les messages", callback_data="admin_clear_messages")],
+            [InlineKeyboardButton("🗑️ Supprimer tous les menus", callback_data="admin_clear_messages")],
+            [InlineKeyboardButton("🗑️ Supprimer messages reçus", callback_data="admin_clear_received_messages")],
             [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
             [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
         ]
@@ -921,41 +922,80 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         await safe_edit_message(
             query,
             "🗑️ **Suppression en cours...**\n\n"
-            "Suppression de tous les messages du bot avec les utilisateurs...\n"
+            "Suppression de tous les menus du bot...\n"
             "Cela peut prendre quelques instants.",
             parse_mode="Markdown"
         )
         
-        # Supprimer les messages stockés
-        users_data = load_users()
-        users_data["messages"] = []
-        save_users(users_data)
-        
-        # Supprimer les messages du bot avec les utilisateurs
+        # Supprimer SEULEMENT les messages du bot avec les utilisateurs (les menus)
+        # NE PAS supprimer les messages reçus par le bot
         deleted_count = await clear_all_bot_messages(context)
         
-        # Supprimer aussi les messages de confirmation et les callbacks
-        # en supprimant les messages récents du bot dans tous les chats
-        try:
-            # Supprimer les messages du bot dans le chat admin actuel
-            admin_chat_id = query.from_user.id
-            await force_delete_all_bot_messages(context, admin_chat_id)
-        except:
-            pass
+        # Afficher le résultat
+        await safe_edit_message(
+            query,
+            f"✅ **Suppression terminée !**\n\n"
+            f"🗑️ {deleted_count} menus supprimés\n\n"
+            f"Les messages reçus par le bot ont été conservés.",
+            parse_mode="Markdown"
+        )
         
+        # Retourner au menu principal après 3 secondes
+        await asyncio.sleep(3)
+        
+        # Afficher le menu principal
+        users_data = load_users()
         keyboard = [
             [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
-            [InlineKeyboardButton("🗑️ Supprimer tous les messages", callback_data="admin_clear_messages")],
+            [InlineKeyboardButton("🗑️ Supprimer tous les menus", callback_data="admin_clear_messages")],
+            [InlineKeyboardButton("🗑️ Supprimer messages reçus", callback_data="admin_clear_received_messages")],
             [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
             [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
         ]
         markup = InlineKeyboardMarkup(keyboard)
-        # Afficher le message de confirmation
+        
         await safe_edit_message(
             query,
-            f"✅ **Suppression terminée !**\n\n"
-            f"*Messages supprimés :* {deleted_count}\n"
-            f"*Messages stockés supprimés :* Tous\n\n"
+            "📢 **Panel Message**\n\n"
+            f"*Utilisateurs enregistrés :* {len(users_data['users'])}\n"
+            f"*Messages reçus :* {len(users_data.get('messages', []))}\n\n"
+            "Choisissez une action :",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        
+    elif query.data == "admin_clear_received_messages":
+        # Supprimer les messages reçus par le bot
+        users_data = load_users()
+        messages_count = len(users_data.get("messages", []))
+        
+        # Supprimer les messages stockés
+        users_data["messages"] = []
+        save_users(users_data)
+        
+        await safe_edit_message(
+            query,
+            f"✅ **Messages reçus supprimés !**\n\n"
+            f"🗑️ {messages_count} messages reçus supprimés\n\n"
+            "Les menus du bot ont été conservés.",
+            parse_mode="Markdown"
+        )
+        
+        # Retourner au menu principal après 3 secondes
+        await asyncio.sleep(3)
+        
+        # Afficher le menu principal
+        keyboard = [
+            [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
+            [InlineKeyboardButton("🗑️ Supprimer tous les menus", callback_data="admin_clear_messages")],
+            [InlineKeyboardButton("🗑️ Supprimer messages reçus", callback_data="admin_clear_received_messages")],
+            [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
+            [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        
+        await safe_edit_message(
+            query,
             "📢 **Panel Message**\n\n"
             f"*Utilisateurs enregistrés :* {len(users_data['users'])}\n"
             f"*Messages reçus :* 0\n\n"
@@ -963,13 +1003,6 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             reply_markup=markup,
             parse_mode="Markdown"
         )
-        
-        # Supprimer le message de confirmation après 3 secondes
-        try:
-            await asyncio.sleep(3)
-            await context.bot.delete_message(chat_id=query.from_user.id, message_id=query.message.message_id)
-        except:
-            pass
     elif query.data == "admin_view_messages":
         users_data = load_users()
         messages = users_data["messages"]
@@ -1333,7 +1366,7 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Retour au panel message
             keyboard = [
                 [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
-                [InlineKeyboardButton("🗑️ Supprimer tous les messages", callback_data="admin_clear_messages")],
+                [InlineKeyboardButton("🗑️ Supprimer tous les menus", callback_data="admin_clear_messages")],
                 [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
                 [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
             ]
