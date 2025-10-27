@@ -104,7 +104,7 @@ async def clear_all_bot_messages(context):
             try:
                 # Essayer de supprimer les messages récents (IDs élevés = plus récents)
                 # On commence par les IDs élevés et on descend, mais de manière plus ciblée
-                for message_id in range(200, 0, -1):  # De 200 à 1 (plus ciblé)
+                for message_id in range(500, 0, -1):  # De 500 à 1 (plus large)
                     try:
                         await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
                         deleted_count += 1
