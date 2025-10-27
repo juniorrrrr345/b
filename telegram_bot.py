@@ -422,18 +422,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user.last_name
     )
     
-    # Supprimer l'ancien message s'il existe
-    if update.message.reply_to_message:
-        try:
-            await update.message.reply_to_message.delete()
-        except:
-            pass
-    
     # Supprimer tous les anciens messages du bot dans cette conversation
     await force_delete_all_bot_messages(context, user.id)
     
     # Attendre un peu pour s'assurer que la suppression est terminée
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.5)
     
     keyboard = [
         [
@@ -449,10 +442,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = data.get("welcome_text", "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :")
     welcome_photo = data.get("welcome_photo")
     
-    # Attendre un peu après la suppression
-    await asyncio.sleep(0.5)
-    
-    # Essayer d'éditer le message de commande /start au lieu d'en créer un nouveau
+    # Envoyer le menu principal
     try:
         if welcome_photo:
             await update.message.reply_photo(
@@ -486,6 +476,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Gestion des callbacks normaux
     if query.data == "back_to_main":
+        # Supprimer tous les anciens messages du bot dans cette conversation
+        await force_delete_all_bot_messages(context, query.from_user.id)
+        
+        # Attendre un peu pour s'assurer que la suppression est terminée
+        await asyncio.sleep(0.3)
+        
         keyboard = [
             [
                 InlineKeyboardButton("📞 Contact", callback_data="contact"),
@@ -500,50 +496,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         welcome_text = data.get("welcome_text", "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :")
         welcome_photo = data.get("welcome_photo")
         
-        if welcome_photo:
-            # Si on a une photo d'accueil, essayer d'éditer le média
-            try:
-                await query.edit_message_media(
-                    media=InputMediaPhoto(media=welcome_photo, caption=welcome_text),
+        try:
+            if welcome_photo:
+                await query.message.reply_photo(
+                    photo=welcome_photo,
+                    caption=welcome_text,
                     reply_markup=reply_markup
                 )
-            except Exception as e:
-                # Si l'édition du média échoue, essayer d'éditer le texte
-                try:
-                    await safe_edit_message(
-                        query,
-                        f"{welcome_text}\n\n🖼️ *Photo d'accueil disponible*",
-                        reply_markup=reply_markup,
-                        parse_mode="Markdown"
-                    )
-                except Exception as e2:
-                    # Si tout échoue, envoyer un nouveau message
-                    try:
-                        await query.message.reply_photo(
-                            photo=welcome_photo,
-                            caption=welcome_text,
-                            reply_markup=reply_markup
-                        )
-                    except Exception as e3:
-                        print(f"Erreur lors de l'affichage de la photo: {e3}")
-                        await query.answer("Erreur lors de l'affichage du contenu")
-        else:
-            try:
-                await safe_edit_message(
-                    query,
-                    welcome_text,
+            else:
+                await query.message.reply_text(
+                    text=welcome_text,
                     reply_markup=reply_markup
                 )
-            except Exception as e:
-                # Si l'édition échoue, envoyer un nouveau message
-                try:
-                    await query.message.reply_text(
-                        welcome_text,
-                        reply_markup=reply_markup
-                    )
-                except Exception as e2:
-                    print(f"Erreur lors de l'envoi du message: {e2}")
-                    await query.answer("Erreur lors de l'affichage du contenu")
+        except Exception as e:
+            print(f"Erreur lors de l'affichage du menu principal: {e}")
+            await query.answer("Erreur lors de l'affichage du contenu")
     elif query.data == "contact_us":
         # Menu pour contacter l'admin
         keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="back_to_main")]]
@@ -684,13 +651,6 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Commande /admin ---
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Supprimer l'ancien message s'il existe
-    if update.message.reply_to_message:
-        try:
-            await update.message.reply_to_message.delete()
-        except:
-            pass
-    
     # Supprimer tous les anciens messages du bot dans cette conversation
     user_id = update.effective_user.id
     await force_delete_all_bot_messages(context, user_id)
