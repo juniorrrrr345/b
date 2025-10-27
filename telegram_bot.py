@@ -1718,12 +1718,29 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         user_id = query.from_user.id
         admins.discard(user_id)
         context.user_data.clear()
-        keyboard = [
-            [
-                InlineKeyboardButton("📞 Contact", callback_data="contact"),
-                InlineKeyboardButton("💼 Nos Services", callback_data="services"),
-            ]
-        ]
+        
+        # Charger les données
+        data = load_data()
+        
+        # Construire le clavier avec les menus du Service
+        keyboard = []
+        
+        # Ajouter les menus du Service
+        services = data.get("services", [])
+        if isinstance(services, str):
+            services = []
+        
+        if services:
+            # Ajouter chaque menu comme un bouton séparé
+            for i, service in enumerate(services):
+                if isinstance(service, dict):
+                    service_name = service.get("name", f"Menu {i+1}")
+                else:
+                    service_name = str(service)
+                keyboard.append([InlineKeyboardButton(service_name, callback_data=f"service_menu_{i}")])
+        else:
+            # Si pas de menus, afficher un message
+            keyboard.append([InlineKeyboardButton("📋 Aucun menu disponible", callback_data="no_menus")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(
             query,
