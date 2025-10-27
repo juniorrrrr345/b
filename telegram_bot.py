@@ -563,7 +563,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append([InlineKeyboardButton("📞 Contact", callback_data="contact")])
         
         # Ajouter les menus du Service
-        data = load_data()
         services = data.get("services", [])
         if isinstance(services, str):
             services = []
