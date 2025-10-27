@@ -205,11 +205,11 @@ async def notify_admin_contact(context, user, message_text):
         username = f"@{user.username}" if user.username else "Pas de @username"
         name = f"{user.first_name} {user.last_name}".strip() if user.last_name else user.first_name
         
+        # Créer le message avec profil Telegram
         admin_message = (
-            f"📨 **Nouveau message de contact**\n\n"
-            f"👤 **Utilisateur :** {name}\n"
-            f"🆔 **ID :** `{user.id}`\n"
-            f"📱 **@username :** {username}\n\n"
+            f"Message envoyé par {name} [{user.id}]\n"
+            f"#{user.id}\n"
+            f"• Pour répondre, répondez à ce message.\n\n"
             f"💬 **Message :**\n{message_text}"
         )
         
@@ -222,7 +222,6 @@ async def notify_admin_contact(context, user, message_text):
         await context.bot.send_message(
             chat_id=admin_id,
             text=admin_message,
-            parse_mode="Markdown",
             reply_markup=reply_markup
         )
     except Exception as e:
@@ -765,10 +764,11 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             message_text = "📊 **Messages reçus** (10 derniers)\n\n"
             
             for i, msg in enumerate(recent_messages, 1):
-                username = f"@{msg['username']}" if msg['username'] else "Sans username"
+                username = f"@{msg['username']}" if msg['username'] else "Sans @username"
                 name = f"{msg['first_name']} {msg['last_name']}".strip()
-                message_text += f"**{i}.** {name} ({username})\n"
-                message_text += f"ID: `{msg['user_id']}`\n"
+                message_text += f"**{i}.** Message envoyé par {name} [{msg['user_id']}]\n"
+                message_text += f"#{msg['user_id']}\n"
+                message_text += f"• {username}\n"
                 message_text += f"Message: {msg['message'][:100]}{'...' if len(msg['message']) > 100 else ''}\n\n"
             
             # Créer des boutons pour chaque message
@@ -792,7 +792,21 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         context.user_data["replying_to"] = user_id
         context.user_data["reply_mode"] = True
         
-        text = f"💬 **Répondre à l'utilisateur**\n\nID: `{user_id}`\n\nTapez votre message de réponse :"
+        # Récupérer les infos de l'utilisateur
+        users_data = load_users()
+        user_info = None
+        for msg in users_data.get("messages", []):
+            if msg["user_id"] == user_id:
+                user_info = msg
+                break
+        
+        if user_info:
+            name = f"{user_info['first_name']} {user_info['last_name']}".strip()
+            username = f"@{user_info['username']}" if user_info['username'] else "Sans @username"
+            text = f"💬 **Répondre à {name}**\n\nID: `{user_id}`\n{username}\n\nTapez votre message de réponse :"
+        else:
+            text = f"💬 **Répondre à l'utilisateur**\n\nID: `{user_id}`\n\nTapez votre message de réponse :"
+        
         keyboard = [[InlineKeyboardButton("❌ Annuler", callback_data="admin_panel")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
