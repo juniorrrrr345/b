@@ -499,6 +499,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     print(f"DEBUG: Callback reçu: {query.data}")
     
+    # Charger les données au début de la fonction
+    data = load_data()
+    
     # Gestion des callbacks admin
     if query.data.startswith("admin_"):
         print("DEBUG: Routage vers handle_admin_callback (admin_)")
