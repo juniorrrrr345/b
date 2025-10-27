@@ -419,25 +419,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user.last_name
     )
     
-    # Supprimer seulement les 5 derniers messages du bot (plus simple et plus rapide)
-    try:
-        message_ids = []
-        async for message in context.bot.iter_history(user.id, limit=10):
-            if message.from_user and message.from_user.id == context.bot.id:
-                message_ids.append(message.message_id)
-                if len(message_ids) >= 5:  # Limiter à 5 messages
-                    break
-        
-        # Supprimer les messages trouvés
-        for message_id in message_ids:
-            try:
-                await context.bot.delete_message(chat_id=user.id, message_id=message_id)
-                await asyncio.sleep(0.1)  # Petite pause entre les suppressions
-            except:
-                continue  # Ignorer les erreurs de suppression
-    except:
-        pass  # Si la suppression échoue, continuer quand même
-    
     keyboard = [
         [
             InlineKeyboardButton("📞 Contact", callback_data="contact"),
@@ -452,26 +433,61 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = data.get("welcome_text", "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :")
     welcome_photo = data.get("welcome_photo")
     
-    # Envoyer le menu principal
+    # Vérifier s'il y a déjà un message principal à éditer
+    main_message_id = context.user_data.get("main_message_id")
+    
+    if main_message_id:
+        # Essayer d'éditer le message existant
+        try:
+            if welcome_photo:
+                await context.bot.edit_message_media(
+                    chat_id=user.id,
+                    message_id=main_message_id,
+                    media=InputMediaPhoto(media=welcome_photo, caption=welcome_text),
+                    reply_markup=reply_markup
+                )
+            else:
+                await context.bot.edit_message_text(
+                    chat_id=user.id,
+                    message_id=main_message_id,
+                    text=welcome_text,
+                    reply_markup=reply_markup
+                )
+            return  # Succès, on sort de la fonction
+        except Exception as e:
+            print(f"Erreur lors de l'édition du message: {e}")
+            # Si l'édition échoue, supprimer l'ancien message et continuer
+            try:
+                await context.bot.delete_message(chat_id=user.id, message_id=main_message_id)
+            except:
+                pass
+            context.user_data.pop("main_message_id", None)  # Nettoyer l'ID invalide
+    
+    # Si pas de message existant ou édition échouée, envoyer un nouveau message
     try:
         if welcome_photo:
-            await update.message.reply_photo(
+            sent_message = await update.message.reply_photo(
                 photo=welcome_photo,
                 caption=welcome_text,
                 reply_markup=reply_markup,
             )
         else:
-            await update.message.reply_text(
+            sent_message = await update.message.reply_text(
                 text=welcome_text,
                 reply_markup=reply_markup,
             )
+        
+        # Stocker l'ID du message pour les prochaines éditions
+        context.user_data["main_message_id"] = sent_message.message_id
+        
     except Exception as e:
         print(f"Erreur lors de l'affichage du menu: {e}")
         # En cas d'erreur, envoyer un message simple
-        await update.message.reply_text(
+        sent_message = await update.message.reply_text(
             text=welcome_text,
             reply_markup=reply_markup,
         )
+        context.user_data["main_message_id"] = sent_message.message_id
 
 
 # --- Boutons ---
@@ -484,27 +500,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_admin_callback(query, context)
         return
     
+    # Gestion des callbacks de sélection de messages
+    if query.data.startswith("select_msg_") or query.data == "select_all_messages" or query.data == "delete_selected_messages":
+        await handle_admin_callback(query, context)
+        return
+    
     # Gestion des callbacks normaux
     if query.data == "back_to_main":
-        # Supprimer seulement les 3 derniers messages du bot (plus simple)
-        try:
-            message_ids = []
-            async for message in context.bot.iter_history(query.from_user.id, limit=5):
-                if message.from_user and message.from_user.id == context.bot.id:
-                    message_ids.append(message.message_id)
-                    if len(message_ids) >= 3:  # Limiter à 3 messages
-                        break
-            
-            # Supprimer les messages trouvés
-            for message_id in message_ids:
-                try:
-                    await context.bot.delete_message(chat_id=query.from_user.id, message_id=message_id)
-                    await asyncio.sleep(0.1)  # Petite pause entre les suppressions
-                except:
-                    continue  # Ignorer les erreurs de suppression
-        except:
-            pass  # Si la suppression échoue, continuer quand même
-        
         keyboard = [
             [
                 InlineKeyboardButton("📞 Contact", callback_data="contact"),
@@ -519,18 +521,53 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         welcome_text = data.get("welcome_text", "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :")
         welcome_photo = data.get("welcome_photo")
         
+        # Vérifier s'il y a déjà un message principal à éditer
+        main_message_id = context.user_data.get("main_message_id")
+        
+        if main_message_id:
+            # Essayer d'éditer le message existant
+            try:
+                if welcome_photo:
+                    await context.bot.edit_message_media(
+                        chat_id=query.from_user.id,
+                        message_id=main_message_id,
+                        media=InputMediaPhoto(media=welcome_photo, caption=welcome_text),
+                        reply_markup=reply_markup
+                    )
+                else:
+                    await context.bot.edit_message_text(
+                        chat_id=query.from_user.id,
+                        message_id=main_message_id,
+                        text=welcome_text,
+                        reply_markup=reply_markup
+                    )
+                return  # Succès, on sort de la fonction
+            except Exception as e:
+                print(f"Erreur lors de l'édition du message: {e}")
+                # Si l'édition échoue, supprimer l'ancien message et continuer
+                try:
+                    await context.bot.delete_message(chat_id=query.from_user.id, message_id=main_message_id)
+                except:
+                    pass
+                context.user_data.pop("main_message_id", None)  # Nettoyer l'ID invalide
+        
+        # Si pas de message existant ou édition échouée, envoyer un nouveau message
         try:
             if welcome_photo:
-                await query.message.reply_photo(
+                sent_message = await query.message.reply_photo(
                     photo=welcome_photo,
                     caption=welcome_text,
                     reply_markup=reply_markup
                 )
             else:
-                await query.message.reply_text(
+                sent_message = await query.message.reply_text(
                     text=welcome_text,
                     reply_markup=reply_markup
                 )
+            
+            # Stocker l'ID du message pour les prochaines éditions
+            context.user_data["main_message_id"] = sent_message.message_id
+            
         except Exception as e:
             print(f"Erreur lors de l'affichage du menu principal: {e}")
             await query.answer("Erreur lors de l'affichage du contenu")
