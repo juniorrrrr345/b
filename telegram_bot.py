@@ -163,8 +163,9 @@ admins = set()  # liste des ID admins connectés
 async def force_delete_all_bot_messages(context, chat_id):
     """Force la suppression de tous les messages du bot dans un chat"""
     try:
+        # Première passe : supprimer les messages récents
         message_ids = []
-        async for message in context.bot.iter_history(chat_id, limit=500):
+        async for message in context.bot.iter_history(chat_id, limit=200):
             if message.from_user and message.from_user.id == context.bot.id:
                 message_ids.append(message.message_id)
         
@@ -176,8 +177,22 @@ async def force_delete_all_bot_messages(context, chat_id):
             except:
                 continue
                 
-        # Attendre un peu et essayer de supprimer encore plus de messages
-        await asyncio.sleep(1)
+        # Deuxième passe : essayer de supprimer plus de messages
+        await asyncio.sleep(0.5)
+        message_ids = []
+        async for message in context.bot.iter_history(chat_id, limit=500):
+            if message.from_user and message.from_user.id == context.bot.id:
+                message_ids.append(message.message_id)
+        
+        for message_id in reversed(message_ids):
+            try:
+                await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+                await asyncio.sleep(0.005)
+            except:
+                continue
+                
+        # Troisième passe : dernière tentative
+        await asyncio.sleep(0.5)
         message_ids = []
         async for message in context.bot.iter_history(chat_id, limit=1000):
             if message.from_user and message.from_user.id == context.bot.id:
@@ -186,7 +201,7 @@ async def force_delete_all_bot_messages(context, chat_id):
         for message_id in reversed(message_ids):
             try:
                 await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-                await asyncio.sleep(0.005)
+                await asyncio.sleep(0.002)
             except:
                 continue
     except:
@@ -307,7 +322,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await force_delete_all_bot_messages(context, user.id)
     
     # Attendre un peu pour s'assurer que la suppression est terminée
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(1)
     
     keyboard = [
         [
@@ -323,15 +338,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = data.get("welcome_text", "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :")
     welcome_photo = data.get("welcome_photo")
     
+    # Supprimer le message de commande /start aussi
+    try:
+        await update.message.delete()
+    except:
+        pass
+    
+    # Attendre un peu après la suppression
+    await asyncio.sleep(0.5)
+    
     if welcome_photo:
-        await update.message.reply_photo(
+        await context.bot.send_photo(
+            chat_id=user.id,
             photo=welcome_photo,
             caption=welcome_text,
             reply_markup=reply_markup,
         )
     else:
-        await update.message.reply_text(
-            welcome_text,
+        await context.bot.send_message(
+            chat_id=user.id,
+            text=welcome_text,
             reply_markup=reply_markup,
         )
 
