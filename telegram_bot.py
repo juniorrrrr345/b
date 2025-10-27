@@ -1178,8 +1178,9 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             print(f"DEBUG: Traitement de l'index {index}")
             if 0 <= index < len(recent_messages):
                 # Trouver l'index dans la liste complète
-                full_index = len(messages) - 10 + index
-                print(f"DEBUG: Index complet calculé: {full_index}")
+                # Les messages récents sont les 10 derniers, donc l'index dans la liste complète est :
+                full_index = len(messages) - len(recent_messages) + index
+                print(f"DEBUG: Index complet calculé: {full_index} (len(messages)={len(messages)}, len(recent)={len(recent_messages)}, index={index})")
                 if 0 <= full_index < len(messages):
                     print(f"DEBUG: Suppression du message à l'index {full_index}")
                     messages.pop(full_index)
