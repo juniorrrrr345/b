@@ -350,16 +350,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Attendre un peu après la suppression
     await asyncio.sleep(0.5)
     
-    if welcome_photo:
-        await context.bot.send_photo(
-            chat_id=user.id,
-            photo=welcome_photo,
-            caption=welcome_text,
-            reply_markup=reply_markup,
-        )
-    else:
-        await context.bot.send_message(
-            chat_id=user.id,
+    # Essayer d'éditer le message de commande /start au lieu d'en créer un nouveau
+    try:
+        if welcome_photo:
+            await update.message.reply_photo(
+                photo=welcome_photo,
+                caption=welcome_text,
+                reply_markup=reply_markup,
+            )
+        else:
+            await update.message.reply_text(
+                text=welcome_text,
+                reply_markup=reply_markup,
+            )
+    except Exception as e:
+        print(f"Erreur lors de l'affichage du menu: {e}")
+        # En cas d'erreur, envoyer un message simple
+        await update.message.reply_text(
             text=welcome_text,
             reply_markup=reply_markup,
         )
@@ -534,6 +541,43 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except Exception as e2:
                     print(f"Erreur lors de l'envoi du message: {e2}")
                     await query.answer("Erreur lors de l'affichage du contenu")
+
+
+# --- Commande /répondre ---
+async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Commande pour répondre à un utilisateur"""
+    # Vérifier si c'est un admin
+    if update.message.from_user.id not in admins:
+        await update.message.reply_text("❌ Cette commande est réservée aux administrateurs.")
+        return
+    
+    # Vérifier la syntaxe : /répondre <user_id> <message>
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text(
+            "📝 **Utilisation :** `/répondre <user_id> <message>`\n\n"
+            "**Exemple :** `/répondre 123456789 Bonjour ! Comment puis-je vous aider ?`",
+            parse_mode="Markdown"
+        )
+        return
+    
+    try:
+        user_id = int(context.args[0])
+        message_text = " ".join(context.args[1:])
+        
+        # Envoyer le message à l'utilisateur
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=f"💬 **Réponse de l'admin :**\n\n{message_text}",
+            parse_mode="Markdown"
+        )
+        
+        # Confirmer à l'admin
+        await update.message.reply_text(f"✅ Message envoyé à l'utilisateur {user_id}")
+        
+    except ValueError:
+        await update.message.reply_text("❌ L'ID utilisateur doit être un nombre.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Erreur lors de l'envoi : {e}")
 
 
 # --- Commande /admin ---
@@ -1039,6 +1083,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin))
+    app.add_handler(CommandHandler("répondre", reply_command))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
