@@ -173,72 +173,80 @@ def is_admin_or_higher(user_id):
 
 async def update_message_display(query, context):
     """Mettre à jour l'affichage des messages avec les sélections"""
-    users_data = load_users()
-    messages = users_data.get("messages", [])
-    recent_messages = messages[-10:]
-    selected_messages = context.user_data.get("selected_messages", [])
-    
-    if recent_messages:
-        message_text = "📊 **Messages reçus (10 derniers)**\n\n"
-        for i, msg in enumerate(recent_messages, 1):
-            name = f"{msg['first_name']} {msg['last_name']}".strip()
-            username = f"@{msg['username']}" if msg['username'] else "Sans @username"
+    try:
+        users_data = load_users()
+        messages = users_data.get("messages", [])
+        recent_messages = messages[-10:]
+        selected_messages = context.user_data.get("selected_messages", [])
+        
+        print(f"DEBUG: selected_messages = {selected_messages}")
+        print(f"DEBUG: recent_messages count = {len(recent_messages)}")
+        
+        if recent_messages:
+            message_text = "📊 **Messages reçus (10 derniers)**\n\n"
+            for i, msg in enumerate(recent_messages, 1):
+                name = f"{msg['first_name']} {msg['last_name']}".strip()
+                username = f"@{msg['username']}" if msg['username'] else "Sans @username"
+                
+                # Indicateur de sélection
+                selection_indicator = "✅" if (i-1) in selected_messages else "☐"
+                
+                message_text += f"{selection_indicator} **{i}.** Message envoyé par {name} [{msg['user_id']}]\n"
+                message_text += f"#{msg['user_id']}\n"
+                message_text += f"• {username}\n"
+                message_text += f"Message: {msg['message'][:100]}{'...' if len(msg['message']) > 100 else ''}\n\n"
             
-            # Indicateur de sélection
-            selection_indicator = "✅" if (i-1) in selected_messages else "☐"
+            # Créer des boutons pour chaque message
+            keyboard = []
+            for i, msg in enumerate(recent_messages, 1):
+                name = f"{msg['first_name']} {msg['last_name']}".strip()
+                # Bouton de sélection + bouton profil
+                selection_text = "❌ Désélectionner" if (i-1) in selected_messages else f"☑️ Sélectionner {i}"
+                keyboard.append([
+                    InlineKeyboardButton(selection_text, callback_data=f"select_msg_{i}"),
+                    InlineKeyboardButton(f"👤 Profil {name}", url=f"tg://user?id={msg['user_id']}")
+                ])
             
-            message_text += f"{selection_indicator} **{i}.** Message envoyé par {name} [{msg['user_id']}]\n"
-            message_text += f"#{msg['user_id']}\n"
-            message_text += f"• {username}\n"
-            message_text += f"Message: {msg['message'][:100]}{'...' if len(msg['message']) > 100 else ''}\n\n"
-        
-        # Créer des boutons pour chaque message
-        keyboard = []
-        for i, msg in enumerate(recent_messages, 1):
-            name = f"{msg['first_name']} {msg['last_name']}".strip()
-            # Bouton de sélection + bouton profil
-            selection_text = "❌ Désélectionner" if (i-1) in selected_messages else f"☑️ Sélectionner {i}"
-            keyboard.append([
-                InlineKeyboardButton(selection_text, callback_data=f"select_msg_{i}"),
-                InlineKeyboardButton(f"👤 Profil {name}", url=f"tg://user?id={msg['user_id']}")
-            ])
-        
-        # Boutons d'action
-        action_buttons = []
-        if selected_messages:
-            action_buttons.append(InlineKeyboardButton(f"🗑️ Supprimer ({len(selected_messages)})", callback_data="delete_selected_messages"))
-        
-        if len(selected_messages) < len(recent_messages):
-            action_buttons.append(InlineKeyboardButton("✅ Tout sélectionner", callback_data="select_all_messages"))
-        
-        if action_buttons:
-            keyboard.append(action_buttons)
-        
-        keyboard.append([InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")])
-        markup = InlineKeyboardMarkup(keyboard)
-        
-        try:
-            await query.edit_message_text(
-                text=message_text,
-                reply_markup=markup,
-                parse_mode="Markdown"
-            )
-        except Exception as e:
-            print(f"Erreur lors de l'édition du message: {e}")
-            await query.answer("Erreur lors de la mise à jour")
-    else:
-        # Aucun message
-        keyboard = [[InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")]]
-        markup = InlineKeyboardMarkup(keyboard)
-        try:
-            await query.edit_message_text(
-                text="📊 **Messages reçus**\n\nAucun message reçu pour le moment.",
-                reply_markup=markup,
-                parse_mode="Markdown"
-            )
-        except Exception as e:
-            print(f"Erreur lors de l'édition du message: {e}")
-            await query.answer("Erreur lors de la mise à jour")
+            # Boutons d'action
+            action_buttons = []
+            if selected_messages:
+                action_buttons.append(InlineKeyboardButton(f"🗑️ Supprimer ({len(selected_messages)})", callback_data="delete_selected_messages"))
+            
+            if len(selected_messages) < len(recent_messages):
+                action_buttons.append(InlineKeyboardButton("✅ Tout sélectionner", callback_data="select_all_messages"))
+            
+            if action_buttons:
+                keyboard.append(action_buttons)
+            
+            keyboard.append([InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")])
+            markup = InlineKeyboardMarkup(keyboard)
+            
+            try:
+                await query.edit_message_text(
+                    text=message_text,
+                    reply_markup=markup,
+                    parse_mode="Markdown"
+                )
+                print("DEBUG: Message édité avec succès")
+            except Exception as e:
+                print(f"Erreur lors de l'édition du message: {e}")
+                await query.answer("Erreur lors de la mise à jour")
+        else:
+            # Aucun message
+            keyboard = [[InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            try:
+                await query.edit_message_text(
+                    text="📊 **Messages reçus**\n\nAucun message reçu pour le moment.",
+                    reply_markup=markup,
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                print(f"Erreur lors de l'édition du message: {e}")
+                await query.answer("Erreur lors de la mise à jour")
+    except Exception as e:
+        print(f"Erreur dans update_message_display: {e}")
+        await query.answer("Erreur lors de la mise à jour de l'affichage")
 
 # --- Fonction pour forcer la suppression de tous les messages du bot ---
 async def force_delete_all_bot_messages(context, chat_id):
@@ -1083,6 +1091,8 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         msg_index = int(query.data.split("_")[2]) - 1  # Convertir en index 0-based
         user_id = query.from_user.id
         
+        print(f"DEBUG: Sélection du message {msg_index} par l'utilisateur {user_id}")
+        
         if not is_admin_or_higher(user_id):
             await query.answer("❌ Vous n'avez pas les permissions.")
             return
@@ -1091,16 +1101,27 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         if "selected_messages" not in context.user_data:
             context.user_data["selected_messages"] = []
         
+        print(f"DEBUG: Avant sélection - selected_messages = {context.user_data['selected_messages']}")
+        
         # Ajouter ou retirer le message de la sélection
         if msg_index in context.user_data["selected_messages"]:
             context.user_data["selected_messages"].remove(msg_index)
             await query.answer("❌ Message désélectionné")
+            print(f"DEBUG: Message {msg_index} désélectionné")
         else:
             context.user_data["selected_messages"].append(msg_index)
             await query.answer("✅ Message sélectionné")
+            print(f"DEBUG: Message {msg_index} sélectionné")
+        
+        print(f"DEBUG: Après sélection - selected_messages = {context.user_data['selected_messages']}")
         
         # Mettre à jour l'affichage
-        await update_message_display(query, context)
+        try:
+            await update_message_display(query, context)
+            print("DEBUG: update_message_display appelé avec succès")
+        except Exception as e:
+            print(f"DEBUG: Erreur dans update_message_display: {e}")
+            await query.answer("Erreur lors de la mise à jour")
     
     elif query.data == "select_all_messages":
         # Sélectionner tous les messages
