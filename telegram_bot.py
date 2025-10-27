@@ -130,10 +130,8 @@ async def clear_all_bot_messages(context):
                 message_ids = []
                 async for message in context.bot.iter_history(chat_id, limit=200):
                     if message.from_user and message.from_user.id == context.bot.id:
-                        # Ne supprimer que les messages avec des boutons (menus) ou des commandes
-                        if (message.reply_markup or 
-                            message.text and ("/start" in message.text or "Choisissez" in message.text or "Menu" in message.text or "Panel" in message.text or "Bienvenue" in message.text)):
-                            message_ids.append(message.message_id)
+                        # Supprimer TOUS les messages du bot
+                        message_ids.append(message.message_id)
                 
                 # Supprimer les messages par lots pour éviter les limites de rate
                 # Supprimer du plus récent au plus ancien pour éviter les conflits
@@ -175,6 +173,20 @@ async def force_delete_all_bot_messages(context, chat_id):
             try:
                 await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
                 await asyncio.sleep(0.01)
+            except:
+                continue
+                
+        # Attendre un peu et essayer de supprimer encore plus de messages
+        await asyncio.sleep(1)
+        message_ids = []
+        async for message in context.bot.iter_history(chat_id, limit=1000):
+            if message.from_user and message.from_user.id == context.bot.id:
+                message_ids.append(message.message_id)
+        
+        for message_id in reversed(message_ids):
+            try:
+                await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+                await asyncio.sleep(0.005)
             except:
                 continue
     except:
@@ -294,6 +306,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Supprimer tous les anciens messages du bot dans cette conversation
     await force_delete_all_bot_messages(context, user.id)
+    
+    # Attendre un peu pour s'assurer que la suppression est terminée
+    await asyncio.sleep(0.5)
     
     keyboard = [
         [
@@ -505,6 +520,9 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Supprimer tous les anciens messages du bot dans cette conversation
     user_id = update.effective_user.id
     await force_delete_all_bot_messages(context, user_id)
+    
+    # Attendre un peu pour s'assurer que la suppression est terminée
+    await asyncio.sleep(0.5)
     
     await update.message.reply_text("🔐 Entrez le mot de passe admin :")
     context.user_data["awaiting_password"] = True
@@ -753,7 +771,13 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
                 message_text += f"ID: `{msg['user_id']}`\n"
                 message_text += f"Message: {msg['message'][:100]}{'...' if len(msg['message']) > 100 else ''}\n\n"
             
-            keyboard = [[InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")]]
+            # Créer des boutons pour chaque message
+            keyboard = []
+            for i, msg in enumerate(recent_messages, 1):
+                name = f"{msg['first_name']} {msg['last_name']}".strip()
+                keyboard.append([InlineKeyboardButton(f"💬 Répondre à {name}", callback_data=f"reply_to_{msg['user_id']}")])
+            
+            keyboard.append([InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")])
             markup = InlineKeyboardMarkup(keyboard)
             await safe_edit_message(
                 query,
