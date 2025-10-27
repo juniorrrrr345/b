@@ -578,6 +578,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Gestion des callbacks normaux
     if query.data == "back_to_main":
+        # Charger les données
+        data = load_data()
+        
         # Construire le clavier avec les menus du Service
         keyboard = []
         
@@ -651,6 +654,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print(f"Erreur lors de l'affichage du menu principal: {e}")
             await query.answer("Erreur lors de l'affichage du contenu")
     elif query.data == "contact_us":
+        # Charger les données
+        data = load_data()
+        
         # Menu pour contacter l'admin
         keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="back_to_main")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -705,6 +711,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["contact_mode"] = True
         
     else:
+        # Charger les données pour cette section
+        data = load_data()
         content = data.get(query.data, "Texte non défini.")
         keyboard = [[InlineKeyboardButton("🔙 Retour", callback_data="back_to_main")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -712,6 +720,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Vérifier s'il y a une photo d'accueil pour l'afficher avec le contenu
         welcome_photo = data.get("welcome_photo")
         
+        # Utiliser safe_edit_message pour gérer les erreurs d'édition
         if welcome_photo:
             # Si on a une photo d'accueil, essayer d'éditer le média
             try:
@@ -720,35 +729,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=reply_markup
                 )
             except Exception as e:
-                # Si l'édition du média échoue, essayer d'éditer le texte
-                try:
-                    await query.edit_message_text(
-                        text=f"{content}\n\n🖼️ *Photo d'accueil disponible*",
-                        reply_markup=reply_markup,
-                        parse_mode="Markdown"
-                    )
-                except Exception as e2:
-                    # Si tout échoue, envoyer un nouveau message
-                    try:
-                        await query.message.reply_photo(
-                            photo=welcome_photo,
-                            caption=content,
-                            reply_markup=reply_markup
-                        )
-                    except Exception as e3:
-                        print(f"Erreur lors de l'affichage de la photo: {e3}")
-                        await query.answer("Erreur lors de l'affichage du contenu")
+                print(f"Erreur lors de l'édition du média: {e}")
+                # Si l'édition du média échoue, utiliser safe_edit_message
+                await safe_edit_message(query, f"{content}\n\n🖼️ *Photo d'accueil disponible*", reply_markup=reply_markup, parse_mode="Markdown")
         else:
-            # Pas de photo, éditer le texte normalement
-            try:
-                await query.edit_message_text(text=content, reply_markup=reply_markup)
-            except Exception as e:
-                # Si l'édition échoue, envoyer un nouveau message
-                try:
-                    await query.message.reply_text(text=content, reply_markup=reply_markup)
-                except Exception as e2:
-                    print(f"Erreur lors de l'envoi du message: {e2}")
-                    await query.answer("Erreur lors de l'affichage du contenu")
+            # Pas de photo, utiliser safe_edit_message
+            await safe_edit_message(query, content, reply_markup=reply_markup)
 
 
 # --- Commande /répondre ---
