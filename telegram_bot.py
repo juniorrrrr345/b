@@ -93,9 +93,12 @@ async def clear_all_bot_messages(context):
     users = users_data["users"]
     deleted_count = 0
     
+    print(f"DEBUG: clear_all_bot_messages - {len(users)} utilisateurs à traiter")
+    
     for user in users:
         try:
             chat_id = user["user_id"]
+            print(f"DEBUG: Traitement de l'utilisateur {chat_id}")
             
             # Essayer de supprimer les messages récents
             # Note: L'API Telegram limite la suppression aux messages des 48 dernières heures
@@ -107,26 +110,32 @@ async def clear_all_bot_messages(context):
                         # Supprimer TOUS les messages du bot
                         message_ids.append(message.message_id)
                 
+                print(f"DEBUG: Trouvé {len(message_ids)} messages du bot pour l'utilisateur {chat_id}")
+                
                 # Supprimer les messages par lots pour éviter les limites de rate
                 # Supprimer du plus récent au plus ancien pour éviter les conflits
                 for message_id in reversed(message_ids):
                     try:
                         await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
                         deleted_count += 1
+                        print(f"DEBUG: Message {message_id} supprimé pour l'utilisateur {chat_id}")
                         # Petite pause pour éviter les limites de rate
-                        await asyncio.sleep(0.02)
+                        await asyncio.sleep(0.1)
                     except Exception as e:
+                        print(f"DEBUG: Erreur suppression message {message_id} pour {chat_id}: {e}")
                         # Ignorer les erreurs de suppression (message trop ancien, etc.)
                         continue
                         
             except Exception as e:
+                print(f"DEBUG: Erreur itération messages pour {chat_id}: {e}")
                 # Si on ne peut pas accéder à l'historique, continuer
                 continue
                     
         except Exception as e:
-            print(f"Erreur lors de la suppression des messages pour {user['user_id']}: {e}")
+            print(f"DEBUG: Erreur traitement utilisateur {user}: {e}")
             continue
     
+    print(f"DEBUG: clear_all_bot_messages terminé - {deleted_count} messages supprimés")
     return deleted_count
 
 
