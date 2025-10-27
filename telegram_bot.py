@@ -419,6 +419,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user.last_name
     )
     
+    # Supprimer tous les anciens messages du bot dans cette conversation
+    await force_delete_all_bot_messages(context, user.id)
+    
+    # Attendre un peu pour s'assurer que la suppression est terminée
+    await asyncio.sleep(0.5)
+    
     keyboard = [
         [
             InlineKeyboardButton("📞 Contact", callback_data="contact"),
@@ -433,56 +439,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = data.get("welcome_text", "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :")
     welcome_photo = data.get("welcome_photo")
     
-    # Vérifier s'il y a déjà un message principal à éditer
-    main_message_id = context.user_data.get("main_message_id")
-    
-    if main_message_id:
-        # Essayer d'éditer le message existant
-        try:
-            if welcome_photo:
-                await context.bot.edit_message_media(
-                    chat_id=user.id,
-                    message_id=main_message_id,
-                    media=InputMediaPhoto(media=welcome_photo, caption=welcome_text),
-                    reply_markup=reply_markup
-                )
-            else:
-                await context.bot.edit_message_text(
-                    chat_id=user.id,
-                    message_id=main_message_id,
-                    text=welcome_text,
-                    reply_markup=reply_markup
-                )
-            return  # Succès, on sort de la fonction
-        except Exception as e:
-            print(f"Erreur lors de l'édition du message: {e}")
-            # Si l'édition échoue, on continue pour envoyer un nouveau message
-    
-    # Si pas de message existant ou édition échouée, envoyer un nouveau message
+    # Envoyer le menu principal
     try:
         if welcome_photo:
-            sent_message = await update.message.reply_photo(
+            await update.message.reply_photo(
                 photo=welcome_photo,
                 caption=welcome_text,
                 reply_markup=reply_markup,
             )
         else:
-            sent_message = await update.message.reply_text(
+            await update.message.reply_text(
                 text=welcome_text,
                 reply_markup=reply_markup,
             )
-        
-        # Stocker l'ID du message pour les prochaines éditions
-        context.user_data["main_message_id"] = sent_message.message_id
-        
     except Exception as e:
         print(f"Erreur lors de l'affichage du menu: {e}")
         # En cas d'erreur, envoyer un message simple
-        sent_message = await update.message.reply_text(
+        await update.message.reply_text(
             text=welcome_text,
             reply_markup=reply_markup,
         )
-        context.user_data["main_message_id"] = sent_message.message_id
 
 
 # --- Boutons ---
