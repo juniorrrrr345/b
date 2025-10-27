@@ -198,6 +198,69 @@ def is_admin_or_higher(user_id):
     """Vérifier si l'utilisateur est admin ou plus"""
     return has_permission(user_id, "ADMIN")
 
+async def update_message_display(query, context):
+    """Mettre à jour l'affichage des messages avec les sélections"""
+    users_data = load_users()
+    messages = users_data.get("messages", [])
+    recent_messages = messages[-10:]
+    selected_messages = context.user_data.get("selected_messages", [])
+    
+    if recent_messages:
+        message_text = "📊 **Messages reçus (10 derniers)**\n\n"
+        for i, msg in enumerate(recent_messages, 1):
+            name = f"{msg['first_name']} {msg['last_name']}".strip()
+            username = f"@{msg['username']}" if msg['username'] else "Sans @username"
+            
+            # Indicateur de sélection
+            selection_indicator = "✅" if (i-1) in selected_messages else "☐"
+            
+            message_text += f"{selection_indicator} **{i}.** Message envoyé par {name} [{msg['user_id']}]\n"
+            message_text += f"#{msg['user_id']}\n"
+            message_text += f"• {username}\n"
+            message_text += f"Message: {msg['message'][:100]}{'...' if len(msg['message']) > 100 else ''}\n\n"
+        
+        # Créer des boutons pour chaque message
+        keyboard = []
+        for i, msg in enumerate(recent_messages, 1):
+            name = f"{msg['first_name']} {msg['last_name']}".strip()
+            # Bouton de sélection + bouton profil
+            selection_text = "❌ Désélectionner" if (i-1) in selected_messages else f"☑️ Sélectionner {i}"
+            keyboard.append([
+                InlineKeyboardButton(selection_text, callback_data=f"select_msg_{i}"),
+                InlineKeyboardButton(f"👤 Profil {name}", url=f"tg://user?id={msg['user_id']}")
+            ])
+        
+        # Boutons d'action
+        action_buttons = []
+        if selected_messages:
+            action_buttons.append(InlineKeyboardButton(f"🗑️ Supprimer ({len(selected_messages)})", callback_data="delete_selected_messages"))
+        
+        if len(selected_messages) < len(recent_messages):
+            action_buttons.append(InlineKeyboardButton("✅ Tout sélectionner", callback_data="select_all_messages"))
+        
+        if action_buttons:
+            keyboard.append(action_buttons)
+        
+        keyboard.append([InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")])
+        markup = InlineKeyboardMarkup(keyboard)
+        
+        await safe_edit_message(
+            query,
+            message_text,
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+    else:
+        # Aucun message
+        keyboard = [[InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "📊 **Messages reçus**\n\nAucun message reçu pour le moment.",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+
 # --- Fonction pour forcer la suppression de tous les messages du bot ---
 async def force_delete_all_bot_messages(context, chat_id):
     """Force la suppression de tous les messages du bot dans un chat"""
@@ -905,8 +968,16 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             keyboard = []
             for i, msg in enumerate(recent_messages, 1):
                 name = f"{msg['first_name']} {msg['last_name']}".strip()
-                keyboard.append([InlineKeyboardButton(f"👤 Voir le profil de {name}", url=f"tg://user?id={msg['user_id']}")])
+                # Bouton de sélection + bouton profil
+                keyboard.append([
+                    InlineKeyboardButton(f"☑️ Sélectionner {i}", callback_data=f"select_msg_{i}"),
+                    InlineKeyboardButton(f"👤 Profil {name}", url=f"tg://user?id={msg['user_id']}")
+                ])
             
+            keyboard.append([
+                InlineKeyboardButton("🗑️ Supprimer sélectionnés", callback_data="delete_selected_messages"),
+                InlineKeyboardButton("✅ Tout sélectionner", callback_data="select_all_messages")
+            ])
             keyboard.append([InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")])
             markup = InlineKeyboardMarkup(keyboard)
             await safe_edit_message(
@@ -986,6 +1057,89 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             "Exemple: `@username` ou `123456789`",
             parse_mode="Markdown"
         )
+    
+    elif query.data.startswith("select_msg_"):
+        # Gérer la sélection d'un message
+        msg_index = int(query.data.split("_")[2]) - 1  # Convertir en index 0-based
+        user_id = query.from_user.id
+        
+        if not is_admin_or_higher(user_id):
+            await query.answer("❌ Vous n'avez pas les permissions.")
+            return
+        
+        # Initialiser la liste des messages sélectionnés si elle n'existe pas
+        if "selected_messages" not in context.user_data:
+            context.user_data["selected_messages"] = []
+        
+        # Ajouter ou retirer le message de la sélection
+        if msg_index in context.user_data["selected_messages"]:
+            context.user_data["selected_messages"].remove(msg_index)
+            await query.answer("❌ Message désélectionné")
+        else:
+            context.user_data["selected_messages"].append(msg_index)
+            await query.answer("✅ Message sélectionné")
+        
+        # Mettre à jour l'affichage
+        await update_message_display(query, context)
+    
+    elif query.data == "select_all_messages":
+        # Sélectionner tous les messages
+        user_id = query.from_user.id
+        
+        if not is_admin_or_higher(user_id):
+            await query.answer("❌ Vous n'avez pas les permissions.")
+            return
+        
+        users_data = load_users()
+        messages = users_data.get("messages", [])
+        recent_messages = messages[-10:]
+        
+        # Sélectionner tous les messages
+        context.user_data["selected_messages"] = list(range(len(recent_messages)))
+        await query.answer(f"✅ {len(recent_messages)} messages sélectionnés")
+        
+        # Mettre à jour l'affichage
+        await update_message_display(query, context)
+    
+    elif query.data == "delete_selected_messages":
+        # Supprimer les messages sélectionnés
+        user_id = query.from_user.id
+        
+        if not is_admin_or_higher(user_id):
+            await query.answer("❌ Vous n'avez pas les permissions.")
+            return
+        
+        selected_messages = context.user_data.get("selected_messages", [])
+        if not selected_messages:
+            await query.answer("❌ Aucun message sélectionné")
+            return
+        
+        # Charger les données
+        users_data = load_users()
+        messages = users_data.get("messages", [])
+        recent_messages = messages[-10:]
+        
+        # Supprimer les messages sélectionnés (en ordre inverse pour éviter les problèmes d'index)
+        deleted_count = 0
+        for index in sorted(selected_messages, reverse=True):
+            if 0 <= index < len(recent_messages):
+                # Trouver l'index dans la liste complète
+                full_index = len(messages) - 10 + index
+                if 0 <= full_index < len(messages):
+                    messages.pop(full_index)
+                    deleted_count += 1
+        
+        # Sauvegarder les modifications
+        users_data["messages"] = messages
+        save_users(users_data)
+        
+        # Nettoyer la sélection
+        context.user_data["selected_messages"] = []
+        
+        await query.answer(f"✅ {deleted_count} messages supprimés")
+        
+        # Mettre à jour l'affichage
+        await update_message_display(query, context)
     
     elif query.data.startswith("role_"):
         # Gérer la sélection de rôle
