@@ -1035,6 +1035,7 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         )
     
     elif query.data == "admin_quit":
+        user_id = query.from_user.id
         admins.discard(user_id)
         context.user_data.clear()
         keyboard = [
@@ -1377,7 +1378,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin))
-    app.add_handler(CommandHandler("répondre", reply_command))
+    app.add_handler(CommandHandler("repondre", reply_command))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
