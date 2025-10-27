@@ -87,45 +87,6 @@ def add_message(user_id, username, first_name, last_name, message_text, timestam
     save_users(users_data)
 
 
-async def clear_all_bot_messages(context):
-    """Supprime TOUS les messages du bot avec TOUS les utilisateurs"""
-    users_data = load_users()
-    users = users_data["users"]
-    deleted_count = 0
-    
-    print(f"DEBUG: clear_all_bot_messages - {len(users)} utilisateurs à traiter")
-    
-    for user in users:
-        try:
-            chat_id = user["user_id"]
-            print(f"DEBUG: Traitement de l'utilisateur {chat_id}")
-            
-            # Supprimer TOUS les messages du bot dans cette conversation
-            try:
-                # Essayer de supprimer TOUS les messages (IDs élevés = plus récents)
-                # On commence par les IDs élevés et on descend jusqu'à 1
-                # Augmentons la limite pour couvrir plus de messages
-                for message_id in range(10000, 0, -1):  # De 10000 à 1 (très large)
-                    try:
-                        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-                        deleted_count += 1
-                        print(f"DEBUG: Message {message_id} supprimé pour l'utilisateur {chat_id}")
-                        await asyncio.sleep(0.01)  # Pause plus courte pour aller plus vite
-                    except:
-                        # Message n'existe pas ou ne peut pas être supprimé, continuer
-                        continue
-                        
-                print(f"DEBUG: Suppression terminée pour l'utilisateur {chat_id}")
-            except Exception as e:
-                print(f"DEBUG: Erreur suppression messages pour {chat_id}: {e}")
-                continue
-                    
-        except Exception as e:
-            print(f"DEBUG: Erreur traitement utilisateur {user}: {e}")
-            continue
-    
-    print(f"DEBUG: clear_all_bot_messages terminé - {deleted_count} messages supprimés")
-    return deleted_count
 
 
 data = load_data()
@@ -912,7 +873,6 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         
         keyboard = [
             [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
-            [InlineKeyboardButton("🗑️ Supprimer tous les menus", callback_data="admin_clear_messages")],
             [InlineKeyboardButton("🗑️ Supprimer messages reçus", callback_data="admin_clear_received_messages")],
             [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
             [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
@@ -938,26 +898,27 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             parse_mode="Markdown"
         )
         context.user_data["editing"] = "broadcast_message"
-    elif query.data == "admin_clear_messages":
+    elif query.data == "admin_clear_received_messages":
         # Afficher un message de traitement
         await safe_edit_message(
             query,
             "🗑️ **Suppression en cours...**\n\n"
-            "Suppression de tous les menus du bot...\n"
+            "Suppression des messages reçus par le bot...\n"
             "Cela peut prendre quelques instants.",
             parse_mode="Markdown"
         )
         
-        # Supprimer SEULEMENT les messages du bot avec les utilisateurs (les menus)
-        # NE PAS supprimer les messages reçus par le bot
-        deleted_count = await clear_all_bot_messages(context)
+        # Supprimer SEULEMENT les messages reçus par le bot (pas les menus)
+        users_data = load_users()
+        users_data["messages"] = []  # Vider la liste des messages reçus
+        save_users(users_data)
         
         # Afficher le résultat
         await safe_edit_message(
             query,
-            f"✅ **Suppression terminée !**\n\n"
-            f"🗑️ {deleted_count} menus supprimés\n\n"
-            f"Les messages reçus par le bot ont été conservés.",
+            "✅ **Suppression terminée !**\n\n"
+            "🗑️ Tous les messages reçus ont été supprimés\n\n"
+            "Les menus du bot ont été conservés.",
             parse_mode="Markdown"
         )
         
@@ -968,7 +929,6 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         users_data = load_users()
         keyboard = [
             [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
-            [InlineKeyboardButton("🗑️ Supprimer tous les menus", callback_data="admin_clear_messages")],
             [InlineKeyboardButton("🗑️ Supprimer messages reçus", callback_data="admin_clear_received_messages")],
             [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
             [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
@@ -1008,7 +968,6 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         # Afficher le menu principal
         keyboard = [
             [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
-            [InlineKeyboardButton("🗑️ Supprimer tous les menus", callback_data="admin_clear_messages")],
             [InlineKeyboardButton("🗑️ Supprimer messages reçus", callback_data="admin_clear_received_messages")],
             [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
             [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
