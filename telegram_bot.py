@@ -228,9 +228,9 @@ async def notify_admin_contact(context, user, message_text):
             f"💬 **Message :**\n{message_text}"
         )
         
-        # Créer un clavier avec bouton pour répondre
+        # Créer un clavier avec bouton pour voir le profil
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-        keyboard = [[InlineKeyboardButton(f"💬 Répondre à {name}", callback_data=f"reply_to_{user.id}")]]
+        keyboard = [[InlineKeyboardButton(f"👤 Voir le profil de {name}", url=f"tg://user?id={user.id}")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         # Envoyer le message à l'admin avec bouton de réponse
@@ -804,7 +804,7 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             keyboard = []
             for i, msg in enumerate(recent_messages, 1):
                 name = f"{msg['first_name']} {msg['last_name']}".strip()
-                keyboard.append([InlineKeyboardButton(f"💬 Répondre à {name}", callback_data=f"reply_to_{msg['user_id']}")])
+                keyboard.append([InlineKeyboardButton(f"👤 Voir le profil de {name}", url=f"tg://user?id={msg['user_id']}")])
             
             keyboard.append([InlineKeyboardButton("🔙 Retour au panel message", callback_data="admin_message_panel")])
             markup = InlineKeyboardMarkup(keyboard)
@@ -815,29 +815,6 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
                 parse_mode="Markdown"
             )
     
-    elif query.data.startswith("reply_to_"):
-        # Gérer la réponse à un utilisateur
-        user_id = int(query.data.split("_")[2])
-        context.user_data["replying_to"] = user_id
-        context.user_data["reply_mode"] = True
-        
-        # Récupérer les infos de l'utilisateur
-        users_data = load_users()
-        user_info = None
-        for msg in users_data.get("messages", []):
-            if msg["user_id"] == user_id:
-                user_info = msg
-                break
-        
-        if user_info:
-            name = f"{user_info['first_name']} {user_info['last_name']}".strip()
-            username = f"@{user_info['username']}" if user_info['username'] else "Sans @username"
-            text = f"💬 **Répondre à {name}**\n\nID: `{user_id}`\n{username}\n\nTapez votre message de réponse :"
-        else:
-            text = f"💬 **Répondre à l'utilisateur**\n\nID: `{user_id}`\n\nTapez votre message de réponse :"
-        
-        # Envoyer le message directement sans menu
-        await query.message.reply_text(text, parse_mode="Markdown")
     
     elif query.data == "admin_panel":
         keyboard = [
@@ -983,40 +960,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Si c'est un admin, gérer les actions admin
     if update.message.from_user.id in admins:
-        # Gérer les réponses aux utilisateurs
-        if context.user_data.get("reply_mode"):
-            user_id = context.user_data.get("replying_to")
-            if user_id:
-                try:
-                    # Récupérer les infos de l'utilisateur pour l'affichage
-                    users_data = load_users()
-                    user_info = None
-                    for msg in users_data.get("messages", []):
-                        if msg["user_id"] == user_id:
-                            user_info = msg
-                            break
-                    
-                    # Envoyer le message à l'utilisateur
-                    await context.bot.send_message(
-                        chat_id=user_id,
-                        text=f"💬 **Réponse de l'admin :**\n\n{update.message.text}"
-                    )
-                    
-                    # Confirmer à l'admin avec infos utilisateur
-                    if user_info:
-                        name = f"{user_info['first_name']} {user_info['last_name']}".strip()
-                        await update.message.reply_text(f"✅ Message envoyé à {name} (ID: {user_id})")
-                    else:
-                        await update.message.reply_text(f"✅ Message envoyé à l'utilisateur {user_id}")
-                    
-                    # Sortir du mode réponse
-                    context.user_data["reply_mode"] = False
-                    context.user_data["replying_to"] = None
-                    return
-                except Exception as e:
-                    await update.message.reply_text(f"❌ Erreur lors de l'envoi : {e}")
-                    return
-        
         await admin_actions(update, context)
         return
     
