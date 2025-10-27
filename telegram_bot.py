@@ -1146,11 +1146,15 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         # Supprimer les messages sélectionnés
         user_id = query.from_user.id
         
+        print(f"DEBUG: Tentative de suppression par l'utilisateur {user_id}")
+        
         if not is_admin_or_higher(user_id):
             await query.answer("❌ Vous n'avez pas les permissions.")
             return
         
         selected_messages = context.user_data.get("selected_messages", [])
+        print(f"DEBUG: Messages sélectionnés: {selected_messages}")
+        
         if not selected_messages:
             await query.answer("❌ Aucun message sélectionné")
             return
@@ -1160,19 +1164,34 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         messages = users_data.get("messages", [])
         recent_messages = messages[-10:]
         
+        print(f"DEBUG: Nombre total de messages: {len(messages)}")
+        print(f"DEBUG: Messages récents: {len(recent_messages)}")
+        
         # Supprimer les messages sélectionnés (en ordre inverse pour éviter les problèmes d'index)
         deleted_count = 0
         for index in sorted(selected_messages, reverse=True):
+            print(f"DEBUG: Traitement de l'index {index}")
             if 0 <= index < len(recent_messages):
                 # Trouver l'index dans la liste complète
                 full_index = len(messages) - 10 + index
+                print(f"DEBUG: Index complet calculé: {full_index}")
                 if 0 <= full_index < len(messages):
+                    print(f"DEBUG: Suppression du message à l'index {full_index}")
                     messages.pop(full_index)
                     deleted_count += 1
+                    print(f"DEBUG: Message supprimé, count = {deleted_count}")
+                else:
+                    print(f"DEBUG: Index {full_index} hors limites")
+            else:
+                print(f"DEBUG: Index {index} hors limites des messages récents")
+        
+        print(f"DEBUG: Nombre de messages supprimés: {deleted_count}")
+        print(f"DEBUG: Nouveau nombre total de messages: {len(messages)}")
         
         # Sauvegarder les modifications
         users_data["messages"] = messages
         save_users(users_data)
+        print("DEBUG: Données sauvegardées")
         
         # Nettoyer la sélection
         context.user_data["selected_messages"] = []
@@ -1180,7 +1199,12 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         await query.answer(f"✅ {deleted_count} messages supprimés")
         
         # Mettre à jour l'affichage
-        await update_message_display(query, context)
+        try:
+            await update_message_display(query, context)
+            print("DEBUG: Affichage mis à jour avec succès")
+        except Exception as e:
+            print(f"DEBUG: Erreur lors de la mise à jour de l'affichage: {e}")
+            await query.answer("Erreur lors de la mise à jour")
     
     elif query.data.startswith("role_"):
         # Gérer la sélection de rôle
