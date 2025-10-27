@@ -1,6 +1,7 @@
 import json
 import os
 import asyncio
+from datetime import datetime
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -158,6 +159,44 @@ async def clear_all_bot_messages(context):
 
 data = load_data()
 admins = set()  # liste des ID admins connectés
+
+# --- Système de rôles ---
+ROLES = {
+    "CHEF": 3,      # Niveau le plus haut - peut tout faire
+    "ADMIN": 2,      # Peut gérer le bot mais pas supprimer d'autres admins
+    "STAFF": 1       # Niveau basique
+}
+
+def load_admins():
+    """Charger la liste des administrateurs depuis le fichier"""
+    try:
+        with open("admins.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_admins(admins_data):
+    """Sauvegarder la liste des administrateurs"""
+    with open("admins.json", "w", encoding="utf-8") as f:
+        json.dump(admins_data, f, ensure_ascii=False, indent=2)
+
+def get_user_role(user_id):
+    """Obtenir le rôle d'un utilisateur"""
+    admins_data = load_admins()
+    return admins_data.get(str(user_id), {}).get("role", "STAFF")
+
+def has_permission(user_id, required_role):
+    """Vérifier si un utilisateur a la permission requise"""
+    user_role = get_user_role(user_id)
+    return ROLES.get(user_role, 0) >= ROLES.get(required_role, 0)
+
+def is_chef(user_id):
+    """Vérifier si l'utilisateur est chef"""
+    return has_permission(user_id, "CHEF")
+
+def is_admin_or_higher(user_id):
+    """Vérifier si l'utilisateur est admin ou plus"""
+    return has_permission(user_id, "ADMIN")
 
 # --- Fonction pour forcer la suppression de tous les messages du bot ---
 async def force_delete_all_bot_messages(context, chat_id):
@@ -604,8 +643,26 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def check_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("awaiting_password"):
         if update.message.text == ADMIN_PASSWORD:
-            admins.add(update.message.from_user.id)
+            user_id = update.message.from_user.id
+            admins.add(user_id)
             context.user_data["awaiting_password"] = False
+            
+            # Vérifier si c'est le premier admin (chef)
+            admins_data = load_admins()
+            if not admins_data:
+                # Premier admin = Chef
+                admins_data[str(user_id)] = {
+                    "role": "CHEF",
+                    "username": update.message.from_user.username,
+                    "name": f"{update.message.from_user.first_name} {update.message.from_user.last_name or ''}".strip(),
+                    "added_by": "system",
+                    "added_date": str(datetime.now())
+                }
+                save_admins(admins_data)
+                await update.message.reply_text("✅ Connexion admin réussie ! Vous êtes maintenant le Chef.")
+            else:
+                await update.message.reply_text("✅ Connexion admin réussie !")
+            
             # Créer le panneau admin avec des boutons callback
             keyboard = [
                 [
@@ -868,10 +925,115 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             ],
             [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
             [InlineKeyboardButton("📢 Message", callback_data="admin_message_panel")],
+            [InlineKeyboardButton("👥 Gestion Admins", callback_data="admin_manage_admins")],
             [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
         ]
         markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(query, "⚙️ Panneau Admin :", reply_markup=markup)
+    
+    elif query.data == "admin_manage_admins":
+        # Vérifier les permissions
+        if not is_admin_or_higher(user_id):
+            await query.answer("❌ Vous n'avez pas les permissions pour gérer les administrateurs.")
+            return
+        
+        admins_data = load_admins()
+        message_text = "👥 **Gestion des Administrateurs**\n\n"
+        
+        # Afficher la liste des admins
+        if admins_data:
+            for admin_id, admin_info in admins_data.items():
+                role = admin_info.get("role", "STAFF")
+                username = admin_info.get("username", "N/A")
+                name = admin_info.get("name", "N/A")
+                message_text += f"• **{name}** (@{username})\n"
+                message_text += f"  ID: `{admin_id}` | Rôle: **{role}**\n\n"
+        else:
+            message_text += "Aucun administrateur enregistré.\n\n"
+        
+        keyboard = [
+            [InlineKeyboardButton("➕ Ajouter Admin", callback_data="admin_add_admin")],
+            [InlineKeyboardButton("❌ Supprimer Admin", callback_data="admin_remove_admin")],
+            [InlineKeyboardButton("🔙 Retour au panel admin", callback_data="admin_panel")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(query, message_text, reply_markup=markup, parse_mode="Markdown")
+    
+    elif query.data == "admin_add_admin":
+        if not is_admin_or_higher(user_id):
+            await query.answer("❌ Vous n'avez pas les permissions.")
+            return
+        
+        context.user_data["adding_admin"] = True
+        await safe_edit_message(
+            query, 
+            "➕ **Ajouter un Administrateur**\n\n"
+            "Envoyez l'@username ou l'ID de l'utilisateur à ajouter :\n"
+            "Exemple: `@username` ou `123456789`",
+            parse_mode="Markdown"
+        )
+    
+    elif query.data == "admin_remove_admin":
+        if not is_chef(user_id):
+            await query.answer("❌ Seul le Chef peut supprimer des administrateurs.")
+            return
+        
+        context.user_data["removing_admin"] = True
+        await safe_edit_message(
+            query, 
+            "❌ **Supprimer un Administrateur**\n\n"
+            "Envoyez l'@username ou l'ID de l'utilisateur à supprimer :\n"
+            "Exemple: `@username` ou `123456789`",
+            parse_mode="Markdown"
+        )
+    
+    elif query.data.startswith("role_"):
+        # Gérer la sélection de rôle
+        role = query.data.split("_")[1]
+        user_id = query.from_user.id
+        
+        if not is_admin_or_higher(user_id):
+            await query.answer("❌ Vous n'avez pas les permissions.")
+            return
+        
+        if not context.user_data.get("choosing_role"):
+            await query.answer("❌ Aucun administrateur en cours d'ajout.")
+            return
+        
+        target_user_id = context.user_data.get("pending_admin_id")
+        target_username = context.user_data.get("pending_admin_username")
+        
+        if not target_user_id:
+            await query.answer("❌ Erreur: ID utilisateur manquant.")
+            return
+        
+        # Ajouter l'administrateur
+        admins_data = load_admins()
+        admins_data[str(target_user_id)] = {
+            "role": role,
+            "username": target_username,
+            "name": f"Utilisateur {target_user_id}",
+            "added_by": user_id,
+            "added_date": str(datetime.now())
+        }
+        save_admins(admins_data)
+        
+        # Nettoyer les données temporaires
+        context.user_data.pop("choosing_role", None)
+        context.user_data.pop("pending_admin_id", None)
+        context.user_data.pop("pending_admin_username", None)
+        
+        await query.answer(f"✅ Administrateur ajouté avec le rôle {role}!")
+        
+        # Retourner au menu de gestion des admins
+        await query.message.reply_text(
+            f"✅ **Administrateur ajouté avec succès !**\n\n"
+            f"ID: `{target_user_id}`\n"
+            f"Username: @{target_username or 'N/A'}\n"
+            f"Rôle: **{role}**",
+            parse_mode="Markdown"
+        )
+    
     elif query.data == "admin_quit":
         admins.discard(user_id)
         context.user_data.clear()
@@ -997,6 +1159,128 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Commande non reconnue.")
 
 
+# --- Gestion de l'ajout d'administrateur ---
+async def handle_add_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Gérer l'ajout d'un administrateur"""
+    user_input = update.message.text.strip()
+    user_id = update.message.from_user.id
+    
+    # Vérifier les permissions
+    if not is_admin_or_higher(user_id):
+        await update.message.reply_text("❌ Vous n'avez pas les permissions.")
+        return
+    
+    try:
+        # Extraire l'ID utilisateur
+        target_user_id = None
+        target_username = None
+        
+        if user_input.startswith("@"):
+            # C'est un @username
+            target_username = user_input[1:]
+            # Pour l'instant, on demande l'ID manuellement
+            await update.message.reply_text(
+                f"👤 Username détecté: @{target_username}\n\n"
+                "Veuillez envoyer l'ID numérique de cet utilisateur :"
+            )
+            context.user_data["pending_username"] = target_username
+            return
+        else:
+            # C'est un ID numérique
+            target_user_id = int(user_input)
+        
+        # Si on a un username en attente, l'associer à l'ID
+        if context.user_data.get("pending_username"):
+            target_username = context.user_data["pending_username"]
+            context.user_data.pop("pending_username", None)
+        
+        # Demander le rôle
+        context.user_data["pending_admin_id"] = target_user_id
+        context.user_data["pending_admin_username"] = target_username
+        context.user_data["adding_admin"] = False
+        context.user_data["choosing_role"] = True
+        
+        keyboard = [
+            [InlineKeyboardButton("👑 Chef", callback_data="role_CHEF")],
+            [InlineKeyboardButton("🛡️ Admin", callback_data="role_ADMIN")],
+            [InlineKeyboardButton("👤 Staff", callback_data="role_STAFF")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            f"👤 **Ajouter Administrateur**\n\n"
+            f"ID: `{target_user_id}`\n"
+            f"Username: @{target_username or 'N/A'}\n\n"
+            f"Choisissez le rôle :",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        
+    except ValueError:
+        await update.message.reply_text("❌ L'ID doit être un nombre valide.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Erreur: {e}")
+
+# --- Gestion de la suppression d'administrateur ---
+async def handle_remove_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Gérer la suppression d'un administrateur"""
+    user_input = update.message.text.strip()
+    user_id = update.message.from_user.id
+    
+    # Vérifier les permissions (seul le chef peut supprimer)
+    if not is_chef(user_id):
+        await update.message.reply_text("❌ Seul le Chef peut supprimer des administrateurs.")
+        return
+    
+    try:
+        # Extraire l'ID utilisateur
+        target_user_id = None
+        
+        if user_input.startswith("@"):
+            # C'est un @username, on doit trouver l'ID
+            target_username = user_input[1:]
+            admins_data = load_admins()
+            for admin_id, admin_info in admins_data.items():
+                if admin_info.get("username") == target_username:
+                    target_user_id = int(admin_id)
+                    break
+            
+            if not target_user_id:
+                await update.message.reply_text("❌ Utilisateur non trouvé dans la liste des administrateurs.")
+                return
+        else:
+            # C'est un ID numérique
+            target_user_id = int(user_input)
+        
+        # Vérifier que l'utilisateur existe dans la liste
+        admins_data = load_admins()
+        if str(target_user_id) not in admins_data:
+            await update.message.reply_text("❌ Cet utilisateur n'est pas dans la liste des administrateurs.")
+            return
+        
+        # Supprimer l'administrateur
+        admin_info = admins_data.pop(str(target_user_id))
+        save_admins(admins_data)
+        
+        # Retirer de la session active si connecté
+        admins.discard(target_user_id)
+        
+        await update.message.reply_text(
+            f"✅ Administrateur supprimé avec succès !\n\n"
+            f"ID: `{target_user_id}`\n"
+            f"Username: @{admin_info.get('username', 'N/A')}\n"
+            f"Rôle: {admin_info.get('role', 'N/A')}",
+            parse_mode="Markdown"
+        )
+        
+        # Sortir du mode suppression
+        context.user_data["removing_admin"] = False
+        
+    except ValueError:
+        await update.message.reply_text("❌ L'ID doit être un nombre valide.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Erreur: {e}")
+
 # --- Gestion du texte et des photos (mot de passe ou actions admin) ---
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await check_password(update, context):
@@ -1004,6 +1288,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Si c'est un admin, gérer les actions admin
     if update.message.from_user.id in admins:
+        # Gérer l'ajout d'administrateur
+        if context.user_data.get("adding_admin"):
+            await handle_add_admin(update, context)
+            return
+        
+        # Gérer la suppression d'administrateur
+        if context.user_data.get("removing_admin"):
+            await handle_remove_admin(update, context)
+            return
+        
         await admin_actions(update, context)
         return
     
