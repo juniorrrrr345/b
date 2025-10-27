@@ -912,6 +912,7 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         
         keyboard = [
             [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
+            [InlineKeyboardButton("🗑️ Supprimer tous les menus", callback_data="admin_clear_messages")],
             [InlineKeyboardButton("🗑️ Supprimer messages reçus", callback_data="admin_clear_received_messages")],
             [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
             [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
@@ -967,6 +968,7 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         users_data = load_users()
         keyboard = [
             [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
+            [InlineKeyboardButton("🗑️ Supprimer tous les menus", callback_data="admin_clear_messages")],
             [InlineKeyboardButton("🗑️ Supprimer messages reçus", callback_data="admin_clear_received_messages")],
             [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
             [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
@@ -1006,6 +1008,7 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         # Afficher le menu principal
         keyboard = [
             [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
+            [InlineKeyboardButton("🗑️ Supprimer tous les menus", callback_data="admin_clear_messages")],
             [InlineKeyboardButton("🗑️ Supprimer messages reçus", callback_data="admin_clear_received_messages")],
             [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
             [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
