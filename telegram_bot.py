@@ -503,13 +503,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
+    print(f"DEBUG: Callback reçu: {query.data}")
+    
     # Gestion des callbacks admin
     if query.data.startswith("admin_"):
+        print("DEBUG: Routage vers handle_admin_callback (admin_)")
         await handle_admin_callback(query, context)
         return
     
     # Gestion des callbacks de sélection de messages
     if query.data.startswith("select_msg_") or query.data == "select_all_messages" or query.data == "delete_selected_messages":
+        print("DEBUG: Routage vers handle_admin_callback (sélection)")
         await handle_admin_callback(query, context)
         return
     
@@ -774,6 +778,7 @@ async def check_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Gestion des callbacks admin ---
 async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
+    print(f"DEBUG: handle_admin_callback appelé avec query.data = {query.data}")
     user_id = query.from_user.id
     if user_id not in admins:
         try:
