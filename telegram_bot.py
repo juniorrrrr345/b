@@ -807,10 +807,8 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         else:
             text = f"💬 **Répondre à l'utilisateur**\n\nID: `{user_id}`\n\nTapez votre message de réponse :"
         
-        keyboard = [[InlineKeyboardButton("❌ Annuler", callback_data="admin_panel")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await safe_edit_message(query, text, reply_markup, "Markdown")
+        # Envoyer le message directement sans menu
+        await query.message.reply_text(text, parse_mode="Markdown")
     
     elif query.data == "admin_panel":
         keyboard = [
@@ -961,14 +959,26 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_id = context.user_data.get("replying_to")
             if user_id:
                 try:
+                    # Récupérer les infos de l'utilisateur pour l'affichage
+                    users_data = load_users()
+                    user_info = None
+                    for msg in users_data.get("messages", []):
+                        if msg["user_id"] == user_id:
+                            user_info = msg
+                            break
+                    
                     # Envoyer le message à l'utilisateur
                     await context.bot.send_message(
                         chat_id=user_id,
                         text=f"💬 **Réponse de l'admin :**\n\n{update.message.text}"
                     )
                     
-                    # Confirmer à l'admin
-                    await update.message.reply_text(f"✅ Message envoyé à l'utilisateur {user_id}")
+                    # Confirmer à l'admin avec infos utilisateur
+                    if user_info:
+                        name = f"{user_info['first_name']} {user_info['last_name']}".strip()
+                        await update.message.reply_text(f"✅ Message envoyé à {name} (ID: {user_id})")
+                    else:
+                        await update.message.reply_text(f"✅ Message envoyé à l'utilisateur {user_id}")
                     
                     # Sortir du mode réponse
                     context.user_data["reply_mode"] = False
