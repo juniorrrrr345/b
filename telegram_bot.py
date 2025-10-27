@@ -86,33 +86,6 @@ def add_message(user_id, username, first_name, last_name, message_text, timestam
     users_data["messages"].append(message_info)
     save_users(users_data)
 
-async def notify_admin_contact(context, user, message_text):
-    """Notifie l'admin d'un nouveau message de contact"""
-    try:
-        # Récupérer l'ID de l'admin (premier admin connecté)
-        admin_id = list(admins)[0] if admins else None
-        
-        if admin_id:
-            # Créer le message de notification
-            username = f"@{user.username}" if user.username else "Pas de @username"
-            name = f"{user.first_name} {user.last_name}".strip()
-            
-            notification_text = (
-                f"🔔 **Nouveau message de contact !**\n\n"
-                f"**👤 De :** {name}\n"
-                f"**📱 @username :** {username}\n"
-                f"**🆔 ID :** `{user.id}`\n\n"
-                f"**💬 Message :**\n{message_text}"
-            )
-            
-            # Envoyer la notification à l'admin
-            await context.bot.send_message(
-                chat_id=admin_id,
-                text=notification_text,
-                parse_mode="Markdown"
-            )
-    except Exception as e:
-        print(f"Erreur lors de la notification admin: {e}")
 
 async def clear_all_bot_messages(context):
     """Supprime tous les messages du bot avec tous les utilisateurs"""
@@ -316,7 +289,7 @@ async def force_delete_all_bot_messages(context, chat_id):
         pass
 
 # --- Fonction pour notifier l'admin des messages de contact ---
-async def notify_admin_contact(context, user, message_text):
+async def notify_admin_contact(context, user, message_text, timestamp=None):
     """Notifie l'admin d'un nouveau message de contact"""
     try:
         # Récupérer l'ID admin (premier admin connecté)
@@ -328,24 +301,42 @@ async def notify_admin_contact(context, user, message_text):
         username = f"@{user.username}" if user.username else "Pas de @username"
         name = f"{user.first_name} {user.last_name}".strip() if user.last_name else user.first_name
         
-        # Créer le message avec profil Telegram
+        # Formater l'heure
+        from datetime import datetime
+        if timestamp:
+            try:
+                time_obj = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                time_str = time_obj.strftime('%H:%M:%S')
+            except:
+                time_str = "Maintenant"
+        else:
+            time_str = "Maintenant"
+        
+        # Créer le message de notification avec emoji et formatage
         admin_message = (
-            f"Message envoyé par {name} [{user.id}]\n"
-            f"#{user.id}\n"
-            f"• Pour répondre, répondez à ce message.\n\n"
-            f"💬 **Message :**\n{message_text}"
+            f"🔔 **NOUVEAU MESSAGE REÇU !**\n\n"
+            f"👤 **De :** {name}\n"
+            f"📱 **@username :** {username}\n"
+            f"🆔 **ID :** `{user.id}`\n"
+            f"⏰ **Heure :** {time_str}\n\n"
+            f"💬 **Message :**\n{message_text}\n\n"
+            f"📝 *Utilisez /repondre {user.id} <votre message> pour répondre*"
         )
         
-        # Créer un clavier avec bouton pour voir le profil
+        # Créer un clavier avec boutons d'action
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-        keyboard = [[InlineKeyboardButton(f"👤 Voir le profil de {name}", url=f"tg://user?id={user.id}")]]
+        keyboard = [
+            [InlineKeyboardButton(f"👤 Voir le profil de {name}", url=f"tg://user?id={user.id}")],
+            [InlineKeyboardButton("📊 Voir tous les messages", callback_data="admin_view_messages")]
+        ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Envoyer le message à l'admin avec bouton de réponse
+        # Envoyer le message à l'admin avec notification
         await context.bot.send_message(
             chat_id=admin_id,
             text=admin_message,
-            reply_markup=reply_markup
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
         )
     except Exception as e:
         print(f"Erreur lors de la notification admin: {e}")
@@ -1439,7 +1430,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         # Notifier l'admin du nouveau message de contact
-        await notify_admin_contact(context, user, message_text)
+        await notify_admin_contact(context, user, message_text, timestamp)
         
         # Confirmer la réception du message
         await update.message.reply_text("✅ Message envoyé ! Nous vous répondrons bientôt.")
@@ -1450,14 +1441,20 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Si c'est un utilisateur normal, enregistrer son message
     user = update.effective_user
+    message_text = update.message.text
+    timestamp = str(update.effective_message.date)
+    
     add_message(
         user.id,
         user.username,
         user.first_name,
         user.last_name,
-        update.message.text,
-        str(update.effective_message.date)
+        message_text,
+        timestamp
     )
+    
+    # Notifier l'admin du nouveau message
+    await notify_admin_contact(context, user, message_text, timestamp)
     
     # Envoyer confirmation à l'utilisateur
     await update.message.reply_text(
