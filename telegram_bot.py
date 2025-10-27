@@ -420,7 +420,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if services:
         # Ajouter chaque menu comme un bouton séparé
         for i, service in enumerate(services):
-            keyboard.append([InlineKeyboardButton(service, callback_data=f"service_menu_{i}")])
+            if isinstance(service, dict):
+                service_name = service.get("name", f"Menu {i+1}")
+            else:
+                service_name = str(service)
+            keyboard.append([InlineKeyboardButton(service_name, callback_data=f"service_menu_{i}")])
     else:
         # Si pas de menus, afficher un message
         keyboard.append([InlineKeyboardButton("📋 Aucun menu disponible", callback_data="no_menus")])
@@ -522,7 +526,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if 0 <= menu_index < len(services):
             # Afficher le contenu du menu sélectionné
-            menu_content = services[menu_index]
+            service = services[menu_index]
+            if isinstance(service, dict):
+                menu_content = service.get("text", "Aucun contenu")
+                menu_photo = service.get("photo", None)
+            else:
+                menu_content = str(service)
+                menu_photo = None
             
             # Créer le clavier de retour
             keyboard = []
@@ -536,10 +546,27 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(
-                text=menu_content,
-                reply_markup=reply_markup
-            )
+            
+            if menu_photo:
+                # Afficher avec photo
+                try:
+                    await query.edit_message_media(
+                        media=InputMediaPhoto(media=menu_photo, caption=menu_content),
+                        reply_markup=reply_markup
+                    )
+                except Exception as e:
+                    # Si l'édition du média échoue, afficher le texte
+                    await query.edit_message_text(
+                        text=f"{menu_content}\n\n🖼️ *Photo disponible*",
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+            else:
+                # Afficher sans photo
+                await query.edit_message_text(
+                    text=menu_content,
+                    reply_markup=reply_markup
+                )
         else:
             await query.answer("❌ Menu introuvable")
         return
@@ -1789,13 +1816,20 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         elif section == "add_menu":
             # Ajouter un nouveau menu
-            new_menu = update.message.text
+            new_menu_text = update.message.text
             data = load_data()
             if "services" not in data:
                 data["services"] = []
             # Si services est une chaîne, la convertir en liste
             if isinstance(data["services"], str):
                 data["services"] = []
+            
+            # Créer un menu avec la nouvelle structure
+            new_menu = {
+                "name": new_menu_text,
+                "text": new_menu_text,
+                "photo": None
+            }
             data["services"].append(new_menu)
             save_data(data)
             context.user_data["editing"] = None
