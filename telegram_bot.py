@@ -912,7 +912,7 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         
         keyboard = [
             [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
-            [InlineKeyboardButton("🗑️ Supprimer tous les menus", callback_data="admin_clear_messages")],
+            [InlineKeyboardButton("ℹ️ Utilisez /clearprivate", callback_data="admin_info_clear")],
             [InlineKeyboardButton("🗑️ Supprimer messages reçus", callback_data="admin_clear_received_messages")],
             [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
             [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
@@ -938,26 +938,16 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             parse_mode="Markdown"
         )
         context.user_data["editing"] = "broadcast_message"
-    elif query.data == "admin_clear_messages":
-        # Afficher un message de traitement
+    elif query.data == "admin_info_clear":
+        # Information sur la commande /clearprivate
+        await query.answer("ℹ️ Information")
+        
         await safe_edit_message(
             query,
-            "🗑️ **Suppression en cours...**\n\n"
-            "Suppression de tous les menus du bot...\n"
-            "Cela peut prendre quelques instants.",
-            parse_mode="Markdown"
-        )
-        
-        # Supprimer SEULEMENT les messages du bot avec les utilisateurs (les menus)
-        # NE PAS supprimer les messages reçus par le bot
-        deleted_count = await clear_all_bot_messages(context)
-        
-        # Afficher le résultat
-        await safe_edit_message(
-            query,
-            f"✅ **Suppression terminée !**\n\n"
-            f"🗑️ {deleted_count} menus supprimés\n\n"
-            f"Les messages reçus par le bot ont été conservés.",
+            "ℹ️ **Suppression des messages du bot**\n\n"
+            "Pour supprimer tous les messages du bot dans toutes les conversations privées, utilisez la commande :\n\n"
+            "`/clearprivate`\n\n"
+            "Cette commande est réservée aux administrateurs et supprimera tous les menus et messages du bot dans toutes les conversations privées.",
             parse_mode="Markdown"
         )
         
@@ -968,7 +958,7 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         users_data = load_users()
         keyboard = [
             [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
-            [InlineKeyboardButton("🗑️ Supprimer tous les menus", callback_data="admin_clear_messages")],
+            [InlineKeyboardButton("ℹ️ Utilisez /clearprivate", callback_data="admin_info_clear")],
             [InlineKeyboardButton("🗑️ Supprimer messages reçus", callback_data="admin_clear_received_messages")],
             [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
             [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
@@ -1008,7 +998,7 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         # Afficher le menu principal
         keyboard = [
             [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
-            [InlineKeyboardButton("🗑️ Supprimer tous les menus", callback_data="admin_clear_messages")],
+            [InlineKeyboardButton("ℹ️ Utilisez /clearprivate", callback_data="admin_info_clear")],
             [InlineKeyboardButton("🗑️ Supprimer messages reçus", callback_data="admin_clear_received_messages")],
             [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
             [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
@@ -1387,7 +1377,7 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Retour au panel message
             keyboard = [
                 [InlineKeyboardButton("📤 Envoyer Message à tous", callback_data="admin_broadcast_message")],
-                [InlineKeyboardButton("🗑️ Supprimer tous les menus", callback_data="admin_clear_messages")],
+                [InlineKeyboardButton("ℹ️ Utilisez /clearprivate", callback_data="admin_info_clear")],
                 [InlineKeyboardButton("📊 Voir les messages reçus", callback_data="admin_view_messages")],
                 [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
             ]
@@ -1657,6 +1647,35 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+# --- Commande /clearprivate ---
+async def clear_private_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Commande pour supprimer tous les messages du bot dans toutes les conversations privées"""
+    user_id = update.effective_user.id
+    
+    # Vérifier si c'est un admin
+    if user_id not in admins:
+        await update.message.reply_text("❌ Accès refusé. Cette commande est réservée aux administrateurs.")
+        return
+    
+    # Confirmer l'action
+    await update.message.reply_text("🔄 Suppression de tous les messages du bot dans toutes les conversations privées...")
+    
+    try:
+        # Supprimer tous les messages du bot
+        deleted_count = await clear_all_bot_messages(context)
+        
+        # Confirmer la suppression
+        await update.message.reply_text(
+            f"✅ Suppression terminée !\n\n"
+            f"🗑️ {deleted_count} messages supprimés\n"
+            f"👥 Toutes les conversations privées ont été nettoyées"
+        )
+        
+    except Exception as e:
+        print(f"Erreur dans clear_private_command: {e}")
+        await update.message.reply_text(f"❌ Erreur lors de la suppression: {e}")
+
+
 # --- Fonction principale ---
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
@@ -1664,6 +1683,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin))
     app.add_handler(CommandHandler("repondre", reply_command))
+    app.add_handler(CommandHandler("clearprivate", clear_private_command))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
