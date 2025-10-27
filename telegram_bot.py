@@ -88,7 +88,7 @@ def add_message(user_id, username, first_name, last_name, message_text, timestam
 
 
 async def clear_all_bot_messages(context):
-    """Supprime tous les messages du bot avec tous les utilisateurs"""
+    """Supprime TOUS les messages du bot avec TOUS les utilisateurs"""
     users_data = load_users()
     users = users_data["users"]
     deleted_count = 0
@@ -100,16 +100,17 @@ async def clear_all_bot_messages(context):
             chat_id = user["user_id"]
             print(f"DEBUG: Traitement de l'utilisateur {chat_id}")
             
-            # Essayer de supprimer les messages récents du bot
+            # Supprimer TOUS les messages du bot dans cette conversation
             try:
-                # Essayer de supprimer les messages récents (IDs élevés = plus récents)
-                # On commence par les IDs élevés et on descend, mais de manière plus ciblée
-                for message_id in range(500, 0, -1):  # De 500 à 1 (plus large)
+                # Essayer de supprimer TOUS les messages (IDs élevés = plus récents)
+                # On commence par les IDs élevés et on descend jusqu'à 1
+                # Augmentons la limite pour couvrir plus de messages
+                for message_id in range(10000, 0, -1):  # De 10000 à 1 (très large)
                     try:
                         await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
                         deleted_count += 1
                         print(f"DEBUG: Message {message_id} supprimé pour l'utilisateur {chat_id}")
-                        await asyncio.sleep(0.02)  # Petite pause pour éviter le rate limit
+                        await asyncio.sleep(0.01)  # Pause plus courte pour aller plus vite
                     except:
                         # Message n'existe pas ou ne peut pas être supprimé, continuer
                         continue
