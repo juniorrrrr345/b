@@ -1042,11 +1042,158 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
             ],
             [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
             [InlineKeyboardButton("📢 Message", callback_data="admin_message_panel")],
+            [InlineKeyboardButton("⚙️ Service", callback_data="admin_service")],
             [InlineKeyboardButton("👥 Gestion Admins", callback_data="admin_manage_admins")],
             [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
         ]
         markup = InlineKeyboardMarkup(keyboard)
         await safe_edit_message(query, "⚙️ Panneau Admin :", reply_markup=markup)
+    
+    elif query.data == "admin_service":
+        # Menu Service - Gestion des menus du /start
+        keyboard = [
+            [InlineKeyboardButton("📋 Voir les menus actuels", callback_data="admin_view_menus")],
+            [InlineKeyboardButton("➕ Ajouter un menu", callback_data="admin_add_menu")],
+            [InlineKeyboardButton("✏️ Modifier un menu", callback_data="admin_edit_menu")],
+            [InlineKeyboardButton("🗑️ Supprimer un menu", callback_data="admin_delete_menu")],
+            [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "⚙️ **Service - Gestion des Menus**\n\n"
+            "Gérez les menus qui s'affichent dans la commande /start\n\n"
+            "Choisissez une action :",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+    
+    elif query.data == "admin_view_menus":
+        # Afficher les menus actuels
+        data = load_data()
+        services = data.get("services", [])
+        
+        if not services:
+            message_text = "📋 **Menus actuels**\n\n❌ Aucun menu configuré"
+        else:
+            message_text = "📋 **Menus actuels**\n\n"
+            for i, service in enumerate(services, 1):
+                message_text += f"**{i}.** {service}\n"
+        
+        keyboard = [[InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(query, message_text, reply_markup=markup, parse_mode="Markdown")
+    
+    elif query.data == "admin_add_menu":
+        # Ajouter un nouveau menu
+        keyboard = [[InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")]]
+        markup = InlineKeyboardMarkup(keyboard)
+        await safe_edit_message(
+            query,
+            "➕ **Ajouter un Menu**\n\n"
+            "Envoyez le texte du nouveau menu que vous voulez ajouter :",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        context.user_data["editing"] = "add_menu"
+    
+    elif query.data == "admin_edit_menu":
+        # Modifier un menu existant
+        data = load_data()
+        services = data.get("services", [])
+        
+        if not services:
+            keyboard = [[InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            await safe_edit_message(
+                query,
+                "✏️ **Modifier un Menu**\n\n❌ Aucun menu à modifier",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+            return
+        
+        # Créer les boutons pour chaque menu
+        keyboard = []
+        for i, service in enumerate(services):
+            keyboard.append([InlineKeyboardButton(f"✏️ {service[:30]}...", callback_data=f"admin_edit_menu_{i}")])
+        keyboard.append([InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")])
+        
+        markup = InlineKeyboardMarkup(keyboard)
+        message_text = "✏️ **Modifier un Menu**\n\nChoisissez le menu à modifier :"
+        await safe_edit_message(query, message_text, reply_markup=markup, parse_mode="Markdown")
+    
+    elif query.data == "admin_delete_menu":
+        # Supprimer un menu
+        data = load_data()
+        services = data.get("services", [])
+        
+        if not services:
+            keyboard = [[InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            await safe_edit_message(
+                query,
+                "🗑️ **Supprimer un Menu**\n\n❌ Aucun menu à supprimer",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+            return
+        
+        # Créer les boutons pour chaque menu
+        keyboard = []
+        for i, service in enumerate(services):
+            keyboard.append([InlineKeyboardButton(f"🗑️ {service[:30]}...", callback_data=f"admin_delete_menu_{i}")])
+        keyboard.append([InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")])
+        
+        markup = InlineKeyboardMarkup(keyboard)
+        message_text = "🗑️ **Supprimer un Menu**\n\nChoisissez le menu à supprimer :"
+        await safe_edit_message(query, message_text, reply_markup=markup, parse_mode="Markdown")
+    
+    elif query.data.startswith("admin_edit_menu_"):
+        # Modifier un menu spécifique
+        menu_index = int(query.data.split("_")[-1])
+        data = load_data()
+        services = data.get("services", [])
+        
+        if 0 <= menu_index < len(services):
+            context.user_data["editing_menu_index"] = menu_index
+            keyboard = [[InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            await safe_edit_message(
+                query,
+                f"✏️ **Modifier le Menu**\n\n"
+                f"Menu actuel : {services[menu_index]}\n\n"
+                f"Envoyez le nouveau texte pour ce menu :",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+            context.user_data["editing"] = "edit_menu"
+        else:
+            await query.answer("❌ Menu introuvable")
+    
+    elif query.data.startswith("admin_delete_menu_"):
+        # Supprimer un menu spécifique
+        menu_index = int(query.data.split("_")[-1])
+        data = load_data()
+        services = data.get("services", [])
+        
+        if 0 <= menu_index < len(services):
+            # Supprimer le menu
+            deleted_menu = services.pop(menu_index)
+            data["services"] = services
+            save_data(data)
+            
+            keyboard = [[InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")]]
+            markup = InlineKeyboardMarkup(keyboard)
+            await safe_edit_message(
+                query,
+                f"✅ **Menu supprimé**\n\n"
+                f"Le menu '{deleted_menu}' a été supprimé avec succès !",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+        else:
+            await query.answer("❌ Menu introuvable")
     
     elif query.data == "admin_manage_admins":
         # Vérifier les permissions
@@ -1358,6 +1505,66 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown",
                 reply_markup=markup
             )
+        elif section == "add_menu":
+            # Ajouter un nouveau menu
+            new_menu = update.message.text
+            data = load_data()
+            if "services" not in data:
+                data["services"] = []
+            data["services"].append(new_menu)
+            save_data(data)
+            context.user_data["editing"] = None
+            
+            # Retour au menu Service
+            keyboard = [
+                [InlineKeyboardButton("📋 Voir les menus actuels", callback_data="admin_view_menus")],
+                [InlineKeyboardButton("➕ Ajouter un menu", callback_data="admin_add_menu")],
+                [InlineKeyboardButton("✏️ Modifier un menu", callback_data="admin_edit_menu")],
+                [InlineKeyboardButton("🗑️ Supprimer un menu", callback_data="admin_delete_menu")],
+                [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+            ]
+            markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                f"✅ **Menu ajouté !**\n\n"
+                f"Le menu '{new_menu}' a été ajouté avec succès !\n\n"
+                f"⚙️ **Service - Gestion des Menus**",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+        elif section == "edit_menu":
+            # Modifier un menu existant
+            new_text = update.message.text
+            menu_index = context.user_data.get("editing_menu_index")
+            data = load_data()
+            services = data.get("services", [])
+            
+            if 0 <= menu_index < len(services):
+                old_menu = services[menu_index]
+                services[menu_index] = new_text
+                data["services"] = services
+                save_data(data)
+                context.user_data["editing"] = None
+                context.user_data["editing_menu_index"] = None
+                
+                # Retour au menu Service
+                keyboard = [
+                    [InlineKeyboardButton("📋 Voir les menus actuels", callback_data="admin_view_menus")],
+                    [InlineKeyboardButton("➕ Ajouter un menu", callback_data="admin_add_menu")],
+                    [InlineKeyboardButton("✏️ Modifier un menu", callback_data="admin_edit_menu")],
+                    [InlineKeyboardButton("🗑️ Supprimer un menu", callback_data="admin_delete_menu")],
+                    [InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]
+                ]
+                markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(
+                    f"✅ **Menu modifié !**\n\n"
+                    f"Ancien : {old_menu}\n"
+                    f"Nouveau : {new_text}\n\n"
+                    f"⚙️ **Service - Gestion des Menus**",
+                    reply_markup=markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await update.message.reply_text("❌ Erreur : Menu introuvable")
         else:
             # Gestion du texte (contact, services, welcome_text)
             data[section] = update.message.text
