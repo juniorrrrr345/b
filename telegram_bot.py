@@ -809,6 +809,10 @@ async def check_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Créer le panneau admin avec des boutons callback
             keyboard = [
                 [
+                    InlineKeyboardButton("👥 Admin", callback_data="admin_manage_admins"),
+                    InlineKeyboardButton("⚙️ Service", callback_data="admin_service")
+                ],
+                [
                     InlineKeyboardButton("✏️ Modifier Contact", callback_data="admin_edit_contact"),
                     InlineKeyboardButton("✏️ Modifier Services", callback_data="admin_edit_services")
                 ],
