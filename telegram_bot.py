@@ -31,8 +31,7 @@ def load_data():
             return json.load(f)
     except FileNotFoundError:
         data = {
-            "contact": "📞 Contactez-nous : contact@monentreprise.com\nTéléphone : +33 6 12 34 56 78",
-            "services": "💼 Nos Services :\n1️⃣ Développement Web\n2️⃣ Design\n3️⃣ Marketing Digital",
+            "services": [],
             "welcome_text": "👋 Bonjour et bienvenue sur notre bot !\nChoisissez une option :",
             "welcome_photo": None,
         }
@@ -409,6 +408,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user.last_name
     )
     
+    # Recharger les données à chaque fois pour avoir les menus à jour
+    data = load_data()
+    
     # Construire le clavier avec les menus du Service
     keyboard = []
     
@@ -540,11 +542,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Ajouter les menus du Service
             if services:
                 for i, service in enumerate(services):
-                    keyboard.append([InlineKeyboardButton(service, callback_data=f"service_menu_{i}")])
+                    if isinstance(service, dict):
+                        service_name = service.get("name", f"Menu {i+1}")
+                    else:
+                        service_name = str(service)
+                    keyboard.append([InlineKeyboardButton(service_name, callback_data=f"service_menu_{i}")])
             else:
                 keyboard.append([InlineKeyboardButton("📋 Aucun menu disponible", callback_data="no_menus")])
             
-            
+            keyboard.append([InlineKeyboardButton("🔙 Retour au menu principal", callback_data="back_to_main")])
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             if menu_photo:
@@ -578,7 +584,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Gestion des callbacks normaux
     if query.data == "back_to_main":
-        # Charger les données
+        # Recharger les données à chaque fois pour avoir les menus à jour
         data = load_data()
         
         # Construire le clavier avec les menus du Service
@@ -592,7 +598,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if services:
             # Ajouter chaque menu comme un bouton séparé
             for i, service in enumerate(services):
-                keyboard.append([InlineKeyboardButton(service, callback_data=f"service_menu_{i}")])
+                if isinstance(service, dict):
+                    service_name = service.get("name", f"Menu {i+1}")
+                else:
+                    service_name = str(service)
+                keyboard.append([InlineKeyboardButton(service_name, callback_data=f"service_menu_{i}")])
         else:
             # Si pas de menus, afficher un message
             keyboard.append([InlineKeyboardButton("📋 Aucun menu disponible", callback_data="no_menus")])
@@ -796,31 +806,7 @@ async def handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE):
 async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     
-    if query.data == "admin_edit_contact":
-        keyboard = [[InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]]
-        markup = InlineKeyboardMarkup(keyboard)
-        await safe_edit_message(
-            query,
-            "✏️ **Modification du Contact**\n\n"
-            "Envoie le nouveau texte pour *Contact* :\n\n"
-            f"*Texte actuel :*\n{data.get('contact', 'Aucun texte défini')}",
-            reply_markup=markup,
-            parse_mode="Markdown"
-        )
-        context.user_data["editing"] = "contact"
-    elif query.data == "admin_edit_services":
-        keyboard = [[InlineKeyboardButton("🔙 Retour au panneau admin", callback_data="admin_panel")]]
-        markup = InlineKeyboardMarkup(keyboard)
-        await safe_edit_message(
-            query,
-            "✏️ **Modification des Services**\n\n"
-            "Envoie le nouveau texte pour *Services* :\n\n"
-            f"*Texte actuel :*\n{data.get('services', 'Aucun texte défini')}",
-            reply_markup=markup,
-            parse_mode="Markdown"
-        )
-        context.user_data["editing"] = "services"
-    elif query.data == "admin_photo_panel":
+    if query.data == "admin_photo_panel":
         keyboard = [
             [InlineKeyboardButton("✏️ Modifier Texte d'accueil", callback_data="admin_edit_welcome_text")],
             [InlineKeyboardButton("🖼️ Modifier Photo d'accueil", callback_data="admin_edit_welcome_photo")],
@@ -1094,7 +1080,15 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         else:
             message_text = "📋 **Menus actuels**\n\n"
             for i, service in enumerate(services, 1):
-                message_text += f"**{i}.** {service}\n"
+                if isinstance(service, dict):
+                    name = service.get("name", f"Menu {i}")
+                    text = service.get("text", "Aucun texte")
+                    photo = service.get("photo", None)
+                    photo_info = " 📷" if photo else ""
+                    message_text += f"**{i}.** {name}{photo_info}\n"
+                    message_text += f"   Texte: {text[:50]}{'...' if len(text) > 50 else ''}\n\n"
+                else:
+                    message_text += f"**{i}.** {service}\n"
         
         keyboard = [[InlineKeyboardButton("🔙 Retour au Service", callback_data="admin_service")]]
         markup = InlineKeyboardMarkup(keyboard)
@@ -1107,11 +1101,11 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         await safe_edit_message(
             query,
             "➕ **Ajouter un Menu**\n\n"
-            "Envoyez le texte du nouveau menu que vous voulez ajouter :",
+            "Envoyez d'abord le **nom** du nouveau menu :",
             reply_markup=markup,
             parse_mode="Markdown"
         )
-        context.user_data["editing"] = "add_menu"
+        context.user_data["editing"] = "add_menu_name"
     
     elif query.data == "admin_edit_menu":
         # Modifier un menu existant
@@ -1662,7 +1656,7 @@ async def handle_admin_callback_internal(query, context: ContextTypes.DEFAULT_TY
         admins.discard(user_id)
         context.user_data.clear()
         
-        # Charger les données
+        # Recharger les données à chaque fois pour avoir les menus à jour
         data = load_data()
         
         # Construire le clavier avec les menus du Service
@@ -1760,28 +1754,66 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown",
                 reply_markup=markup
             )
-        elif section == "add_menu":
-            # Ajouter un nouveau menu
-            new_menu_text = update.message.text
+        elif section == "add_menu_name":
+            # Étape 1: Nom du menu
+            menu_name = update.message.text
+            context.user_data["new_menu_name"] = menu_name
+            context.user_data["editing"] = "add_menu_text"
+            
+            await update.message.reply_text(
+                f"✅ **Nom du menu enregistré :** {menu_name}\n\n"
+                "Maintenant, envoyez le **texte** de ce menu :",
+                parse_mode="Markdown"
+            )
+            
+        elif section == "add_menu_text":
+            # Étape 2: Texte du menu
+            menu_text = update.message.text
+            menu_name = context.user_data.get("new_menu_name", "Menu sans nom")
+            context.user_data["new_menu_text"] = menu_text
+            context.user_data["editing"] = "add_menu_photo"
+            
+            await update.message.reply_text(
+                f"✅ **Texte du menu enregistré**\n\n"
+                f"**Nom :** {menu_name}\n"
+                f"**Texte :** {menu_text[:100]}{'...' if len(menu_text) > 100 else ''}\n\n"
+                "Voulez-vous ajouter une photo ? Envoyez une photo ou tapez 'non' pour continuer sans photo :",
+                parse_mode="Markdown"
+            )
+            
+        elif section == "add_menu_photo":
+            # Étape 3: Photo du menu (optionnelle)
+            menu_name = context.user_data.get("new_menu_name", "Menu sans nom")
+            menu_text = context.user_data.get("new_menu_text", "Aucun texte")
+            menu_photo = None
+            
+            if update.message.photo:
+                # L'utilisateur a envoyé une photo
+                menu_photo = update.message.photo[-1].file_id
+                photo_info = "avec photo"
+            else:
+                # L'utilisateur a tapé 'non' ou autre chose
+                photo_info = "sans photo"
+            
+            # Créer le menu final
             data = load_data()
             if "services" not in data:
                 data["services"] = []
-            # Si services est une chaîne, la convertir en liste
             if isinstance(data["services"], str):
                 data["services"] = []
             
-            # Créer un menu avec la nouvelle structure
             new_menu = {
-                "name": new_menu_text,
-                "text": new_menu_text,
-                "photo": None
+                "name": menu_name,
+                "text": menu_text,
+                "photo": menu_photo
             }
             data["services"].append(new_menu)
             save_data(data)
-            context.user_data["editing"] = None
             
-            # Recharger les données pour s'assurer de la cohérence
-            data = load_data()
+            # Nettoyer les données temporaires
+            context.user_data.pop("new_menu_name", None)
+            context.user_data.pop("new_menu_text", None)
+            context.user_data["editing"] = None
             
             # Retour au menu Service
             keyboard = [
@@ -1800,8 +1832,10 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
             
             await update.message.reply_text(
-                f"✅ **Menu ajouté !**\n\n"
-                f"Le menu '{new_menu}' a été ajouté avec succès !\n\n"
+                f"✅ **Menu ajouté avec succès !**\n\n"
+                f"**Nom :** {menu_name}\n"
+                f"**Texte :** {menu_text[:50]}{'...' if len(menu_text) > 50 else ''}\n"
+                f"**Photo :** {'Oui' if menu_photo else 'Non'}\n\n"
                 f"⚙️ **Service - Gestion des Menus**",
                 reply_markup=markup,
                 parse_mode="Markdown"
@@ -1923,12 +1957,12 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await update.message.reply_text("❌ Erreur : Menu introuvable")
         else:
-            # Gestion du texte (contact, services, welcome_text)
-            data[section] = update.message.text
-            save_data(data)
-            context.user_data["editing"] = None
-            
+            # Gestion du texte (welcome_text uniquement)
             if section == "welcome_text":
+                data[section] = update.message.text
+                save_data(data)
+                context.user_data["editing"] = None
+                
                 # Retour au panel photo
                 keyboard = [
                     [InlineKeyboardButton("✏️ Modifier Texte d'accueil", callback_data="admin_edit_welcome_text")],
@@ -1939,22 +1973,6 @@ async def admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 markup = InlineKeyboardMarkup(keyboard)
                 await update.message.reply_text(
                     f"✅ Texte d'accueil mis à jour !\n\n🖼️ Panel Admin Photo :",
-                    reply_markup=markup
-                )
-            else:
-                # Retour au menu admin principal
-                keyboard = [
-                    [
-                        InlineKeyboardButton("👥 Admin", callback_data="admin_manage_admins"),
-                        InlineKeyboardButton("⚙️ Service", callback_data="admin_service")
-                    ],
-                    [InlineKeyboardButton("🖼️ Panel Admin Photo", callback_data="admin_photo_panel")],
-                    [InlineKeyboardButton("📢 Message", callback_data="admin_message_panel")],
-                    [InlineKeyboardButton("🚪 Quitter admin", callback_data="admin_quit")]
-                ]
-                markup = InlineKeyboardMarkup(keyboard)
-                await update.message.reply_text(
-                    f"✅ Texte '{section}' mis à jour !\n\n⚙️ Panneau Admin :",
                     reply_markup=markup
                 )
     else:
@@ -2046,6 +2064,12 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "✅ Photo d'accueil mise à jour !\n\n🖼️ Panel Admin Photo :",
             reply_markup=markup
         )
+    elif section == "add_menu_photo":
+        # Photo pour un nouveau menu - gérer dans admin_actions
+        await admin_actions(update, context)
+    elif section == "edit_menu_field":
+        # Photo pour modification d'un menu existant - gérer dans admin_actions
+        await admin_actions(update, context)
 
 
 # --- Fonction principale ---

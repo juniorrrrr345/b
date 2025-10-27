@@ -51,8 +51,9 @@ if [ ! -f "$BOT_DIR/data.json" ]; then
     echo "📄 Création du fichier de données..."
     cat > $BOT_DIR/data.json << EOF
 {
-    "contact": "📞 Contactez-nous : contact@monentreprise.com\\nTéléphone : +33 6 12 34 56 78",
-    "services": "💼 Nos Services :\\n1️⃣ Développement Web\\n2️⃣ Design\\n3️⃣ Marketing Digital"
+    "services": [],
+    "welcome_text": "👋 Bonjour et bienvenue sur notre bot !\\nChoisissez une option :",
+    "welcome_photo": null
 }
 EOF
 fi
